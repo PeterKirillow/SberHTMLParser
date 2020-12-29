@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SberHTMLParser": {
+      "commandName": "Project",
+      "commandLineArgs": "E:\\DATA\\test\\test.html"
+    }
+  }
+}

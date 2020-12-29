@@ -4,21 +4,25 @@ using System.Data;
 using System.Linq;
 using ClosedXML.Excel;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace SberHTMLParser
 {
     class Program
     {
+        private static string html;
 
         /**************************************************************************/
-        // create array of tables from gtml document
-        public static string[] ParseHtmlSplitTables(string htmlString)
+        // create array of tables from html
+        public static string[] ParseHtmlSplitTables()
         {
             string[] result = new string[] { };
-            if (!String.IsNullOrWhiteSpace(htmlString))
+            if (!String.IsNullOrWhiteSpace(html))
             {
                 HtmlDocument doc = new HtmlDocument();
-                doc.LoadHtml(htmlString);
+                doc.LoadHtml(html);
                 var tableNodes = doc.DocumentNode.SelectNodes("//table");
                 if (tableNodes != null)
                 {
@@ -28,19 +32,51 @@ namespace SberHTMLParser
             return result;
         }
 
-        /**************************************************************************/
-        static void Main(string[] args)
+        /**/
+        static int Main(string[] args)
         {
             HtmlDocument doc;
-            const string xlsFile = "C:\\Users\\peter\\OneDrive\\_data\\QUICK\\сбербанк\\40032HX\\40032HX_011020_311020_M.xlsx";
+            string in_file = "";
+            string out_file = "";
+            string[] htmlTables;
+            List<DateTime> report_dates = new List<DateTime>();
+            List<Table> tables_list = new List<Table>();
+
+            /*----------------------------------------------------------------------------*/
+            if (args.Length == 0)
+            {
+                Console.WriteLine("SberHTMLParser <path to Html file>");
+                return 1;
+            } else
+            {
+                in_file = args[0];
+                if ( !File.Exists(in_file) )
+                {
+                    Console.WriteLine($"File {in_file} does not exists");
+                    return 1;
+                }
+            }
+            out_file = in_file.Replace(Path.GetExtension(in_file), ".xlsx");
+            /*----------------------------------------------------------------------------*/
 
             // загружаем документ в строку
-            htmlDocument h = new htmlDocument("C:\\Users\\peter\\OneDrive\\_data\\QUICK\\сбербанк\\40032HX\\40032HX_011020_311020_M.html");
+            html = File.ReadAllText(in_file);
             // парсим документ и создаем массив из всех таблиц
-            string[] htmlTables = ParseHtmlSplitTables(h.html);
+            htmlTables = ParseHtmlSplitTables();
 
-            var tables_list = new List<Table>();
-
+            // узнаем период отчета и дату создания
+            string pattern = @"за период с \b\d{2}\.\d{2}.\d{4}\b";
+            if (Regex.IsMatch(html, pattern))
+            {
+                Match match = Regex.Matches(html, pattern).First();
+                string s = html.Substring(match.Index, 62);
+                var regex = new Regex(@"\b\d{2}\.\d{2}.\d{4}\b");
+                foreach (Match m in regex.Matches(s))
+                {
+                    DateTime dt;
+                    if (DateTime.TryParseExact(m.Value, "dd.MM.yyyy", null, DateTimeStyles.None, out dt)) { report_dates.Add(dt); }
+                }
+            }
             // парсим каждую таблицу по отдельности
             foreach (var t in htmlTables)
             {
@@ -50,22 +86,22 @@ namespace SberHTMLParser
                 // пытаемся понять, что это за табличка
                 var header = nodes[0].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
 
-                // таблица "Оценка активов"
+                // "Оценка активов"
                 if (header.Length == 4 && header[0] == "Торговая площадка" && header[3] == "Оценка, руб.")
                 {
                     tables_list.Add(new Table("valuation", "Оценка активов", nodes, 1));
                 }
-                // таблица "Портфель Ценных Бумаг"
+                // "Портфель Ценных Бумаг"
                 else if (header.Length == 5 && header[0] == "" && header[4] == "Плановые показатели")
                 {
                     tables_list.Add(new Table("portfolio", "Портфель Ценных Бумаг", nodes, 2));
                 }
-                // таблица "Денежные средства"
+                // "Денежные средства"
                 else if (header.Length == 9 && header[0] == "Торговая площадка" && header[8] == "Плановый исходящий остаток")
                 {
                     tables_list.Add(new Table("money", "Денежные средства", nodes, 3));
                 }
-                // таблица "Движение денежных средств за период"
+                // "Движение денежных средств за период"
                 else if (header.Length == 6 && header[0] == "Дата" && header[5] == "Сумма списания")
                 {
                     tables_list.Add(new Table("operations", "Движение денежных средств", nodes, 4));
@@ -83,17 +119,55 @@ namespace SberHTMLParser
                 // "Сделки РЕПО"
                 else if (header.Length == 21 && header[0] == "Дата заключения" && header[11].Contains("РЕПО"))
                 {
-                    tables_list.Add(new Table("repo", "Сделки РЕПО", nodes, 9));
+                    tables_list.Add(new Table("repo", "Сделки РЕПО", nodes, 8));
+                }
+                // "Выплаты дохода от эмитента на внешний счет"
+                else if (header.Length == 5 && header[0] == "Дата" && header[4].Contains("Сумма"))
+                {
+                    tables_list.Add(new Table("money_out", "Выплаты дохода на внешний счет", nodes, 9));
                 }
             }
 
+            /*----------------------------------------------------------------------------*/
             // export to excel
+            /*----------------------------------------------------------------------------*/
             var wb = new XLWorkbook();
-            foreach(Table t in tables_list.OrderBy(o => o.Order))
+
+            // worksheet "даты"
+            IXLWorksheet ws;
+            ws = wb.Worksheets.Add("даты");
+            int i = 1;
+            foreach (DateTime d in report_dates)
             {
-                wb.Worksheets.Add(t.table, t.WorksheetName);
+                if (i == 1) { ws.Cell(i, 1).Value = "Начало периода";  }
+                if (i == 2) { ws.Cell(i, 1).Value = "Конец периода";  }
+                if (i == 3) { ws.Cell(i, 1).Value = "Дата создания отчета";  }
+                ws.Cell(i, 2).Value = d.ToString();
+                i++;
             }
-            wb.SaveAs(xlsFile);
+            ws.Columns().AdjustToContents();
+
+            // worksheets from array of tables
+            foreach (Table t in tables_list.OrderBy(o => o.Order))
+            {
+                ws = wb.Worksheets.Add(t.table, t.WorksheetName);
+                for (int a=0; a<= t.table.Columns.Count - 1; a++)
+                {
+                    if (t.table.Columns[a].DataType == System.Type.GetType("System.Double")) {
+                        ws.Columns(a+1,a+1).Style.NumberFormat.Format = "#,##0.00";
+                    }                    
+                }
+                ws.Row(1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                ws.Row(1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
+                ws.Tables.FirstOrDefault().ShowAutoFilter = false;
+                ws.Columns().AdjustToContents();
+            }
+
+            // save file
+            wb.SaveAs(out_file);
+            /*----------------------------------------------------------------------------*/
+
+            return 0;
         }
     }
 }

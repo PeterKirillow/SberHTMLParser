@@ -68,27 +68,27 @@ namespace SberHTMLParser
             else if (this.Name.Equals("repo"))
             {
                 table.Columns.Add("Тип РЕПО", typeof(String));
-                table.Columns.Add("Дата заключения", typeof(DateTime));
-                table.Columns.Add("Время заключения", typeof(String));
-                table.Columns.Add("Наименование ЦБ", typeof(String));
-                table.Columns.Add("Код ЦБ", typeof(String));
-                table.Columns.Add("Валюта", typeof(String));
-                table.Columns.Add("Вид", typeof(String));
-                table.Columns.Add("Количество, шт.", typeof(double));
-                table.Columns.Add("Цена 1-й части", typeof(double));
-                table.Columns.Add("НКД по 1-й части.", typeof(double));
-                table.Columns.Add("Сумма по 1-й части", typeof(double));
-                table.Columns.Add("Дата исполнения 1-й части", typeof(DateTime));
-                table.Columns.Add("Ставка РЕПО, %", typeof(double));
-                table.Columns.Add("Процент РЕПО", typeof(double));
-                table.Columns.Add("Цена 2-й части", typeof(double));
-                table.Columns.Add("НКД по 2-й части", typeof(double));
-                table.Columns.Add("Сумма по 2-й части", typeof(double));
-                table.Columns.Add("Дата исполнения 2-й части", typeof(DateTime));
-                table.Columns.Add("Комиссия Брокера", typeof(double));
-                table.Columns.Add("Комиссия Биржи", typeof(double));
-                table.Columns.Add("Номер сделки", typeof(String));
-                table.Columns.Add("Статус сделки", typeof(String));
+                table.Columns.Add($"Дата{Environment.NewLine}заключения", typeof(DateTime));
+                table.Columns.Add($"Время{Environment.NewLine}заключения", typeof(String));
+                table.Columns.Add($"Наименование{Environment.NewLine}ЦБ", typeof(String));
+                table.Columns.Add($"Код{Environment.NewLine}ЦБ", typeof(String));
+                table.Columns.Add($"Валюта", typeof(String));
+                table.Columns.Add($"Вид", typeof(String));
+                table.Columns.Add($"Количество,{Environment.NewLine}шт.", typeof(double));
+                table.Columns.Add($"Цена 1-й{Environment.NewLine}части", typeof(double));
+                table.Columns.Add($"НКД по 1-й{Environment.NewLine}части.", typeof(double));
+                table.Columns.Add($"Сумма по 1-й{Environment.NewLine}части", typeof(double));
+                table.Columns.Add($"Дата{Environment.NewLine}исполнения{Environment.NewLine}1-й части", typeof(DateTime));
+                table.Columns.Add($"Ставка{Environment.NewLine}РЕПО,{Environment.NewLine}%", typeof(double));
+                table.Columns.Add($"Процент{Environment.NewLine}РЕПО", typeof(double));
+                table.Columns.Add($"Цена 2-й{Environment.NewLine}части", typeof(double));
+                table.Columns.Add($"НКД по 2-й{Environment.NewLine}части", typeof(double));
+                table.Columns.Add($"Сумма по 2-й{Environment.NewLine}части", typeof(double));
+                table.Columns.Add($"Дата{Environment.NewLine}исполнения{Environment.NewLine}2-й части", typeof(DateTime));
+                table.Columns.Add($"Комиссия{Environment.NewLine}Брокера", typeof(double));
+                table.Columns.Add($"Комиссия{Environment.NewLine}Биржи", typeof(double));
+                table.Columns.Add($"Номер{Environment.NewLine}сделки", typeof(String));
+                table.Columns.Add($"Статус{Environment.NewLine}сделки", typeof(String));
             }
             else if (this.Name.Equals("money"))
             {
@@ -98,36 +98,44 @@ namespace SberHTMLParser
                 table.Columns.Add("Начало периода", typeof(double));
                 table.Columns.Add("Изменение за период", typeof(double));
                 table.Columns.Add("Конец периода", typeof(double));
-                table.Columns.Add("Плановые зачисления по сделкам", typeof(double));
-                table.Columns.Add("Плановые списания по сделкам", typeof(double));
-                table.Columns.Add("Плановый исходящий остаток", typeof(double));
+                table.Columns.Add($"Плановые зачисления{Environment.NewLine}по сделкам", typeof(double));
+                table.Columns.Add($"Плановые списания{Environment.NewLine}по сделкам", typeof(double));
+                table.Columns.Add($"Плановый исходящий{Environment.NewLine}остаток", typeof(double));
             }
             else if (this.Name.Equals("portfolio"))
             {
                 table.Columns.Add("Площадка", typeof(String));
 
                 table.Columns.Add("Наименование", typeof(String));
-                table.Columns.Add("ISIN ценной бумаги", typeof(String));
-                table.Columns.Add("Валюта рыночной цены", typeof(String));
+                table.Columns.Add($"ISIN ценной{Environment.NewLine}бумаги", typeof(String));
+                table.Columns.Add($"Валюта{Environment.NewLine}рыночной{Environment.NewLine}цены", typeof(String));
                 // Начало периода
-                table.Columns.Add("Начало периода\nКоличество, шт", typeof(double));
-                table.Columns.Add("Начало периода\nНоминал", typeof(double));
-                table.Columns.Add("Начало периода\nРыночная цена", typeof(double));
-                table.Columns.Add("Начало периода\nРыночная стоимость, без НКД", typeof(double));
-                table.Columns.Add("Начало периода\nНКД", typeof(double));
+                table.Columns.Add($"Начало периода{Environment.NewLine}Количество, шт", typeof(double));
+                table.Columns.Add($"Начало периода{Environment.NewLine}Номинал", typeof(double));
+                table.Columns.Add($"Начало периода{Environment.NewLine}Рыночная цена", typeof(double));
+                table.Columns.Add($"Начало периода{Environment.NewLine}Рыночная стоимость,{Environment.NewLine}без НКД", typeof(double));
+                table.Columns.Add($"Начало периода{Environment.NewLine}НКД", typeof(double));
                 // Конец периода
-                table.Columns.Add("Конец периода\nКоличество, шт", typeof(double));
-                table.Columns.Add("Конец периода\nНоминал", typeof(double));
-                table.Columns.Add("Конец периода\nРыночная цена", typeof(double));
-                table.Columns.Add("Конец периода\nРыночная стоимость, без НКД", typeof(double));
-                table.Columns.Add("Конец периода\nНКД", typeof(double));
+                table.Columns.Add($"Конец периода{Environment.NewLine}Количество, шт", typeof(double));
+                table.Columns.Add($"Конец периода{Environment.NewLine}Номинал", typeof(double));
+                table.Columns.Add($"Конец периода{Environment.NewLine}Рыночная цена", typeof(double));
+                table.Columns.Add($"Конец периода{Environment.NewLine}Рыночная стоимость,{Environment.NewLine}без НКД", typeof(double));
+                table.Columns.Add($"Конец периода{Environment.NewLine}НКД", typeof(double));
                 // Изменение за период	
-                table.Columns.Add("Изменение за период\nКоличество, шт", typeof(double));
-                table.Columns.Add("Изменение за период\nРыночная стоимость", typeof(double));
+                table.Columns.Add($"Изменение за период{Environment.NewLine}Количество, шт", typeof(double));
+                table.Columns.Add($"Изменение за период{Environment.NewLine}Рыночная стоимость", typeof(double));
                 // Плановые показатели
-                table.Columns.Add("Плановые зачисления по сделкам, шт", typeof(double));
-                table.Columns.Add("Плановые списания по сделкам, шт", typeof(double));
-                table.Columns.Add("Плановый исходящий остаток, шт", typeof(double));
+                table.Columns.Add($"Плановые зачисления{Environment.NewLine}по сделкам, шт", typeof(double));
+                table.Columns.Add($"Плановые списания{Environment.NewLine}по сделкам, шт", typeof(double));
+                table.Columns.Add($"Плановый исходящий{Environment.NewLine}остаток, шт", typeof(double));
+            }
+            else if (this.Name.Equals("money_out"))
+            {
+                table.Columns.Add("Дата", typeof(DateTime));
+                table.Columns.Add("Торговая площадка", typeof(String));
+                table.Columns.Add("Описание операции", typeof(String));
+                table.Columns.Add("Валюта", typeof(String));
+                table.Columns.Add("Сумма", typeof(double));
             }
 
             int shift = 0;  /* если таблица разделена на части, то наименование части
