@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Globalization;
+using System.Text;
 
 namespace SberHTMLParser
 {
@@ -60,16 +61,35 @@ namespace SberHTMLParser
             /*----------------------------------------------------------------------------*/
 
             // загружаем документ в строку
+            // изначально всё должно быть в кодировке UTF-8 и по-русски
+            // но, если файл был сохранен в кодировке windows-1251, то это надо бы явно указать
+            // считываем файл в строку сначала без преобразования и попробуем найти фразу "Отчет брокера"
+            // если не находим, то пробуем переключиться в windows-1251
             html = File.ReadAllText(in_file);
+            if ( ! html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
+            {
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                html = File.ReadAllText(in_file, Encoding.GetEncoding("windows-1251"));
+                if (!html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"Файл {in_file} в неизвестной кодировке");
+                    return 1;
+                }                   
+            }
+            // убираем из документа <TBODY> и </TBODY>. Нам при парсинге таблиц они не нужны. В разных вариантах брокерского отчета эти теги или есть или нет.
+            html = html.Replace("<tbody>", "", StringComparison.OrdinalIgnoreCase).Replace("</tbody>", "", StringComparison.OrdinalIgnoreCase);
+
             // парсим документ и создаем массив из всех таблиц
             htmlTables = ParseHtmlSplitTables();
 
-            // узнаем период отчета и дату создания
-            string pattern = @"за период с \b\d{2}\.\d{2}.\d{4}\b";
+            // узнаем период отчета и дату создания. очень приблизительно предполагаем, что это строка 
+            // <br>за период с dd.MM.YYYY по dd.MM.YYYY, дата создания dd.MM.YYYY</br>
+            string pattern = "дата создания";
             if (Regex.IsMatch(html, pattern))
             {
                 Match match = Regex.Matches(html, pattern).First();
-                string s = html.Substring(match.Index, 62);
+                string s = html.Substring(match.Index-30, 62);
+
                 var regex = new Regex(@"\b\d{2}\.\d{2}.\d{4}\b");
                 foreach (Match m in regex.Matches(s))
                 {
@@ -83,6 +103,7 @@ namespace SberHTMLParser
                 doc = new HtmlDocument();
                 doc.LoadHtml(t);
                 var nodes = doc.DocumentNode.SelectNodes("//table/tr");
+
                 // пытаемся понять, что это за табличка
                 var header = nodes[0].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
 
