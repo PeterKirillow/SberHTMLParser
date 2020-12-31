@@ -137,6 +137,22 @@ namespace SberHTMLParser
                 table.Columns.Add("Валюта", typeof(String));
                 table.Columns.Add("Сумма", typeof(double));
             }
+            else if (this.Name.Equals("operations_other"))
+            {
+                table.Columns.Add("Площадка", typeof(String));
+
+                table.Columns.Add("Дата операции", typeof(DateTime));
+                table.Columns.Add("Наименование ЦБ", typeof(String));
+                table.Columns.Add("Код ЦБ", typeof(String));
+                table.Columns.Add("Вид", typeof(String));
+                table.Columns.Add("Основание операции", typeof(String));
+                table.Columns.Add("Количество, шт.", typeof(double));
+                table.Columns.Add("Дата приобретения", typeof(DateTime));
+                table.Columns.Add("Цена", typeof(double));
+                table.Columns.Add("Комиссия Брокера,руб.", typeof(double));
+                table.Columns.Add("Комиссия Биржи, руб.", typeof(double));
+                table.Columns.Add("Другие затраты", typeof(double));
+            }
 
             int shift = 0;  /* если таблица разделена на части, то наименование части
                              * (например имя площадки в сделках или тип репо в табличке с репо)
@@ -146,7 +162,7 @@ namespace SberHTMLParser
             String[] add_row = { }; /*массив, который будет добавлен в начало массива row, если определим, что таблица раздалена на части*/
 
             int skip = 1;   // сколько строк заголовка таблицы пропускаем
-            if (this.Name.Equals("portfolio")) { skip = 2; }
+            if (this.Name.Equals("portfolio") || this.Name.Equals("operations_other")) { skip = 2; }
 
             // получаем все строки, кроме заголовков
             var rows = n.Skip(skip).Select(tr => tr.Elements("td").Select(td => td.InnerText.Trim()).ToArray());
@@ -154,7 +170,7 @@ namespace SberHTMLParser
             foreach (string[] row in rows)
             {
                 // все Итого и пустые строки игнорируем
-                if (!row[0].Contains("Итого") || (row.Length == 1 && row[0] == "") )
+                if (!row[0].Contains("Итого") && !row[0].Contains("Общий итог") && !(row.Length == 1 && row[0] == "") )
                 {
                     /* предположительно, если строка состоит из одного элемента,
                     *  то это подзаголовок и нужно сформировать из этого значения дополнительную колонку
@@ -166,12 +182,16 @@ namespace SberHTMLParser
                         continue;
                     }
 
-                    // конвертация строки в double
+                    // конвертация строки в double / datetime
                     for (int i = 0; i <= table.Columns.Count - 1; i++)
                     {
                         if (table.Columns[i].DataType == System.Type.GetType("System.Double")) {
-                            if (row[i - shift] == "") { row[i - shift] = "0";  }    // если должно быть число, то пусто заменяем на 0
+                            if (row[i - shift] == "") { row[i - shift] = "0";  }    // если должно быть число, то "пусто" заменяем на 0
                             row[i - shift] = row[i - shift].Replace(" ", "");       // если число разделено пробелами, убираем его
+                        }
+                        if (table.Columns[i].DataType == System.Type.GetType("System.DateTime"))
+                        {
+                            if (row[i - shift] == "") { row[i - shift] = "01.01.1970"; }    // если должна быть дата, то "пусто" заменяем на '1970-01-01'
                         }
                     }
 

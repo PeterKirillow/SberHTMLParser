@@ -106,6 +106,7 @@ namespace SberHTMLParser
 
                 // пытаемся понять, что это за табличка
                 var header = nodes[0].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
+                var header_2 = nodes[1].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
 
                 // "Оценка активов"
                 if (header.Length == 4 && header[0] == "Торговая площадка" && header[3] == "Оценка, руб.")
@@ -146,6 +147,11 @@ namespace SberHTMLParser
                 else if (header.Length == 5 && header[0] == "Дата" && header[4].Contains("Сумма"))
                 {
                     tables_list.Add(new Table("money_out", "Выплаты дохода на внешний счет", nodes, 9));
+                }
+                // "Движение ЦБ, не связанное с исполнением сделок"
+                else if (header_2.Length == 11 && header_2[0] == "Дата операции" && header_2[10].Contains("Другие затраты"))
+                {
+                    tables_list.Add(new Table("operations_other", "Другие движения ЦБ", nodes, 7));
                 }
             }
 
