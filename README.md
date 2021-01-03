@@ -24,3 +24,4 @@ Converting Sberbank HTML brokerage report to Excel
 <br>После парсинга данных из отчета происходит формирование позиции на каждый день за весь период отчета в закладку "Позиция".
 
 <br>Инсталяция происходит путем копирования папки _release на локальный диск. Может потребоваться установка .NET 5.1.
+<br><a href="https://downgit.github.io/#/home?url=https://github.com/PeterKirillow/SberHTMLParser/tree/master/_release/net5.0">Или просто скачать архив</a>
