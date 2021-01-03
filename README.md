@@ -1,5 +1,6 @@
 # SberHTMLParser
-Converting Sberbank HTML brokerage report to Excel
+Converting Sberbank HTML brokerage report to Excel.
+<br>Конвертация брокерского отчета Сбербанк в эксель.
 
 <br>Using: SberHTMLParser &#60;path to file>
 <br><br>.NET 5.1
