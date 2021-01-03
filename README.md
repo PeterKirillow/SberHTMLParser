@@ -16,4 +16,5 @@ Converting Sberbank HTML brokerage report to Excel
 <br>"Выплаты дохода от эмитента на внешний счет"
 <br>"Справочник Ценных Бумаг"
 
-<br><br>определение самих таблиц и параметров их идентификации производится через конфигурационный файл
+<br><br>определение самих таблиц и параметров их идентификации производится через <a href="https://github.com/PeterKirillow/SberHTMLParser/blob/master/App.config">конфигурационный файл</a>
+
