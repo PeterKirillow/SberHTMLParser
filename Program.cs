@@ -3,27 +3,27 @@ using System;
 using System.Data;
 using System.Linq;
 using ClosedXML.Excel;
-using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Globalization;
 using System.Text;
+using System.Configuration;
 
 namespace SberHTMLParser
 {
     class Program
     {
-        private static string html;
+        public static Variables va = new Variables();
 
         /**************************************************************************/
         // create array of tables from html
         public static string[] ParseHtmlSplitTables()
         {
             string[] result = new string[] { };
-            if (!String.IsNullOrWhiteSpace(html))
+            if (!String.IsNullOrWhiteSpace(va.html))
             {
                 HtmlDocument doc = new HtmlDocument();
-                doc.LoadHtml(html);
+                doc.LoadHtml(va.html);
                 var tableNodes = doc.DocumentNode.SelectNodes("//table");
                 if (tableNodes != null)
                 {
@@ -33,15 +33,13 @@ namespace SberHTMLParser
             return result;
         }
 
-        /**/
+        /**************************************************************************/
         static int Main(string[] args)
         {
             HtmlDocument doc;
             string in_file = "";
             string out_file = "";
-            string[] htmlTables;
-            List<DateTime> report_dates = new List<DateTime>();
-            List<Table> tables_list = new List<Table>();
+            string[] htmlTables;            
 
             /*----------------------------------------------------------------------------*/
             if (args.Length == 0)
@@ -65,19 +63,19 @@ namespace SberHTMLParser
             // но, если файл был сохранен в кодировке windows-1251, то это надо бы явно указать
             // считываем файл в строку сначала без преобразования и попробуем найти фразу "Отчет брокера"
             // если не находим, то пробуем переключиться в windows-1251
-            html = File.ReadAllText(in_file);
-            if ( ! html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
+            va.html = File.ReadAllText(in_file);
+            if ( !va.html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
             {
                 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-                html = File.ReadAllText(in_file, Encoding.GetEncoding("windows-1251"));
-                if (!html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
+                va.html = File.ReadAllText(in_file, Encoding.GetEncoding("windows-1251"));
+                if (!va.html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine($"Файл {in_file} в неизвестной кодировке");
                     return 1;
                 }                   
             }
             // убираем из документа <TBODY> и </TBODY>. Нам при парсинге таблиц они не нужны. В разных вариантах брокерского отчета эти теги или есть или нет.
-            html = html.Replace("<tbody>", "", StringComparison.OrdinalIgnoreCase).Replace("</tbody>", "", StringComparison.OrdinalIgnoreCase);
+            va.html = va.html.Replace("<tbody>", "", StringComparison.OrdinalIgnoreCase).Replace("</tbody>", "", StringComparison.OrdinalIgnoreCase);
 
             // парсим документ и создаем массив из всех таблиц
             htmlTables = ParseHtmlSplitTables();
@@ -85,86 +83,74 @@ namespace SberHTMLParser
             // узнаем период отчета и дату создания. очень приблизительно предполагаем, что это строка 
             // <br>за период с dd.MM.YYYY по dd.MM.YYYY, дата создания dd.MM.YYYY</br>
             string pattern = "дата создания";
-            if (Regex.IsMatch(html, pattern))
+            if (Regex.IsMatch(va.html, pattern))
             {
-                Match match = Regex.Matches(html, pattern).First();
-                string s = html.Substring(match.Index-30, 62);
+                Match match = Regex.Matches(va.html, pattern).First();
+                string s = va.html.Substring(match.Index-30, 62);
 
                 var regex = new Regex(@"\b\d{2}\.\d{2}.\d{4}\b");
                 foreach (Match m in regex.Matches(s))
                 {
                     DateTime dt;
-                    if (DateTime.TryParseExact(m.Value, "dd.MM.yyyy", null, DateTimeStyles.None, out dt)) { report_dates.Add(dt); }
+                    if (DateTime.TryParseExact(m.Value, "dd.MM.yyyy", null, DateTimeStyles.None, out dt)) { va.report_dates.Add(dt); }
                 }
             }
-            // парсим каждую таблицу по отдельности
+
+            /*----------------------------------------------------------------------------*/
+            // парсим каждую таблицу по отдельности сверяясь со списком из конфигурационнго файла
             foreach (var t in htmlTables)
             {
+                Table T = null;
                 doc = new HtmlDocument();
                 doc.LoadHtml(t);
                 var nodes = doc.DocumentNode.SelectNodes("//table/tr");
 
-                // пытаемся понять, что это за табличка
-                var header = nodes[0].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
-                var header_2 = nodes[1].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
+                // список таблиц и параметры парсинга заголовков для определения имени таблицы
+                string[] v = ConfigurationManager.AppSettings.AllKeys.Where(key => key.StartsWith("tables")).Select(key => ConfigurationManager.AppSettings[key]).ToArray(); ;
+                foreach (string s in v)
+                {
+                    var e = s.Split(';');
+                    string table_name = e[0];
+                    int h_row = Convert.ToInt32(e[1]);
+                    int h_length = Convert.ToInt32(e[2]);
+                    string columns = e[3];
+                    string columns_content = e[4];
 
-                // "Оценка активов"
-                if (header.Length == 4 && header[0] == "Торговая площадка" && header[3] == "Оценка, руб.")
-                {
-                    tables_list.Add(new Table("valuation", "Оценка активов", nodes, 1));
+                    var header = nodes[h_row].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
+                    if (header.Length == h_length)
+                    {
+                        int found = 0;
+                        var c = columns.Split('#');
+                        for (int ii=1; ii<= c.Length; ii++)
+                        {
+                            if (header[Convert.ToInt32(c[ii-1])].Contains(columns_content.Split('#')[ii-1]))
+                            {
+                                found++;
+                            }
+                        }
+                        if (found == c.Length) { T = new Table(table_name); }
+                    }
                 }
-                // "Портфель Ценных Бумаг"
-                else if (header.Length == 5 && header[0] == "" && header[4] == "Плановые показатели")
+
+                if ( T != null)
                 {
-                    tables_list.Add(new Table("portfolio", "Портфель Ценных Бумаг", nodes, 2));
+                    T.addrows_from_nodes(nodes);
+                    va.tables_list.Add(T);
                 }
-                // "Денежные средства"
-                else if (header.Length == 9 && header[0] == "Торговая площадка" && header[8] == "Плановый исходящий остаток")
-                {
-                    tables_list.Add(new Table("money", "Денежные средства", nodes, 3));
-                }
-                // "Движение денежных средств за период"
-                else if (header.Length == 6 && header[0] == "Дата" && header[5] == "Сумма списания")
-                {
-                    tables_list.Add(new Table("operations", "Движение денежных средств", nodes, 4));
-                }
-                // "Сделки купли/продажи ценных бумаг"
-                else if (header.Length == 16 && header[0] == "Дата заключения" && header[15].Contains("Статус сделки"))
-                {
-                    tables_list.Add(new Table("deals", "Сделки купли продажи ЦБ", nodes, 5));
-                }
-                // "Справочник Ценных Бумаг"
-                else if (header.Length == 6 && header[0] == "Наименование" && header[5] == "Выпуск, Транш, Серия")
-                {
-                    tables_list.Add(new Table("instruments", "Справочник ЦБ", nodes, 10));
-                }
-                // "Сделки РЕПО"
-                else if (header.Length == 21 && header[0] == "Дата заключения" && header[11].Contains("РЕПО"))
-                {
-                    tables_list.Add(new Table("repo", "Сделки РЕПО", nodes, 8));
-                }
-                // "Выплаты дохода от эмитента на внешний счет"
-                else if (header.Length == 5 && header[0] == "Дата" && header[4].Contains("Сумма"))
-                {
-                    tables_list.Add(new Table("money_out", "Выплаты дохода на внешний счет", nodes, 9));
-                }
-                // "Движение ЦБ, не связанное с исполнением сделок"
-                else if (header_2.Length == 11 && header_2[0] == "Дата операции" && header_2[10].Contains("Другие затраты"))
-                {
-                    tables_list.Add(new Table("operations_other", "Другие движения ЦБ", nodes, 7));
-                }
+
             }
+            /*----------------------------------------------------------------------------*/
 
             /*----------------------------------------------------------------------------*/
             // export to excel
             /*----------------------------------------------------------------------------*/
             var wb = new XLWorkbook();
 
-            // worksheet "даты"
+            // worksheet "Даты"
             IXLWorksheet ws;
-            ws = wb.Worksheets.Add("даты");
+            ws = wb.Worksheets.Add("Даты");
             int i = 1;
-            foreach (DateTime d in report_dates)
+            foreach (DateTime d in va.report_dates)
             {
                 if (i == 1) { ws.Cell(i, 1).Value = "Начало периода";  }
                 if (i == 2) { ws.Cell(i, 1).Value = "Конец периода";  }
@@ -174,11 +160,17 @@ namespace SberHTMLParser
             }
             ws.Columns().AdjustToContents();
 
-            // worksheets from array of tables
-            foreach (Table t in tables_list.OrderBy(o => o.Order))
+            // worksheet "Позиция"
+            Position p = new Position(va);
+            va.tables_list.Add(p.T);
+            p.calculate();
+
+
+            // worksheets from list of tables
+            foreach (Table t in va.tables_list.OrderBy(o => o.Order))
             {
                 ws = wb.Worksheets.Add(t.table, t.WorksheetName);
-                for (int a=0; a<= t.table.Columns.Count - 1; a++)
+                for (int a=0; a<= t.table.Columns.Count - 1; a++) 
                 {
                     if (t.table.Columns[a].DataType == System.Type.GetType("System.Double")) {
                         ws.Columns(a+1,a+1).Style.NumberFormat.Format = "#,##0.00";
