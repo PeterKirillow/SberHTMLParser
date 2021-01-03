@@ -34,7 +34,7 @@ namespace SberHTMLParser
         /******************************************************************/
         private void delete_row(DateTime d)
         {
-            var query = from r in T.table.AsEnumerable() where r.Field<DateTime>("Date") == d && r.Field<Double>("Quantity") == 0 select r;
+            var query = from r in T.table.AsEnumerable() where r.Field<DateTime>("Date") == d && Math.Round(r.Field<Double>("Quantity"),4) == 0 select r;
             foreach (var row in query.ToList()) { row.Delete(); }
         }
 
@@ -92,9 +92,16 @@ namespace SberHTMLParser
 
                 // Вставляем новые строки из сделок по новым инструментам
                 var n = from o in dd.AsEnumerable()
+                        join i in instruments.AsEnumerable() on o.Instrument equals i.Field<string>("Instrument")
                         where !pos.AsEnumerable().Any(p => o.TradingSys == p.Field<String>("TradingSys") && o.Instrument == p.Field<String>("Instrument"))
-                        select o;
-                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, "", x.Quantity.ToString() }); }
+                        select new
+                        {
+                            TradingSys = o.TradingSys,
+                            Instrument = o.Instrument,
+                            ISIN = i.Field<string>("ISIN"),
+                            Quantity = o.Quantity
+                        };
+                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, x.ISIN , x.Quantity.ToString() }); }
             }
         }
 
@@ -120,22 +127,28 @@ namespace SberHTMLParser
                          by new { TradingSys = r.Field<string>("TradingSys"), Instrument = r.Field<string>("Instrument") }
                          into g
                          select new { g.Key.TradingSys, g.Key.Instrument, Quantity = g.Sum(x => x.Quantity) };
-
+                // UNION
                 var op = o1.Union(o2);
 
                 // Запрос для апдейта существующих строк в позиции
                 var j =
-                    from p in pos
-                    join o in op
+                    from p in pos join o in op
                     on new { TradingSys = p.Field<string>("TradingSys"), Instrument = p.Field<string>("Instrument") } equals new { TradingSys = o.TradingSys, Instrument = o.Instrument }
                     select new { DataRow = p, Qty = p.Field<double>("Quantity") + o.Quantity };
                 foreach (var x in j) x.DataRow["Quantity"] = x.Qty;
 
-                // Вставляем новые строки из сделок по новым инструментам
+                // Вставляем новые строки из операций по новым инструментам
                 var n = from o in op.AsEnumerable()
+                        join i in instruments.AsEnumerable() on o.Instrument equals i.Field<string>("Instrument")
                         where !pos.AsEnumerable().Any(p => o.TradingSys == p.Field<String>("TradingSys") && o.Instrument == p.Field<String>("Instrument"))
-                        select o;
-                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, "", x.Quantity.ToString() }); }
+                        select new
+                        {
+                            TradingSys = o.TradingSys,
+                            Instrument = o.Instrument,
+                            ISIN = i.Field<string>("ISIN"),
+                            Quantity = o.Quantity
+                        };
+                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, x.ISIN, x.Quantity.ToString() }); }
             }
         }
 
