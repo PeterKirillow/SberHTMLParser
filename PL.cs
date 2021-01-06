@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -422,14 +423,22 @@ namespace SberHTMLParser
                     // валюты инструмента из входящих остатков и сделок
                     // дело в том, что есть вводы инструментов, они идут только в количестве, но без оценки на дату ввода и валюты
                     // надо создать строку с инструментом с валютой, в которой он торгуется.
-                    var c_portf = from r in portfolio.AsEnumerable() where r.Field<String>("Instrument") == Instrument select r.Field<String>("Currency");
-                    var c_deals = from r in deals.AsEnumerable() where r.Field<String>("Instrument") == Instrument select r.Field<String>("Currency");
-                    var c_j = c_portf.Union(c_deals).Distinct();
-
-                    foreach (var c in c_j)
+                    List<string> curr_List;
+                    List<string> curr_List_p;
+                    List<string> curr_List_d;
+                    curr_List_p = portfolio.AsEnumerable().Where(i => i["Instrument"].ToString() == Instrument ).Select(x => x["Currency"].ToString()).Distinct().ToList();
+                    if (deals != null)
                     {
-                        this.Currency = c;
-                       
+                        curr_List_d = deals.AsEnumerable().Where(i => i["Instrument"].ToString() == Instrument).Select(x => x["Currency"].ToString()).Distinct().ToList();
+                        curr_List = curr_List_p.Concat(curr_List_d).ToList();
+                    } else
+                    {
+                        curr_List = curr_List_p;
+                    }
+
+                    foreach (var c in curr_List)
+                    {
+                        this.Currency = c;                       
                         position_from_portfolio(Instrument, Currency);
                         add_inoperations(Instrument, "begin");
                         add_inoperations(Instrument, "all");
@@ -439,8 +448,8 @@ namespace SberHTMLParser
                         add_coupons_ext(Instrument, Currency);
                         add_repaiments(Instrument, Currency);
                         add_row();
-                        //update_row(Instrument, Currency);
                     }
+                    
                 }
 
             }
@@ -448,24 +457,26 @@ namespace SberHTMLParser
 
             /*----------------------------------------------------------------------------*/
             // добавляем строки по валютам, чтобы учесть доходы/расходы, которые невозможно привязать к инструменту
-            // например Дивиденды и Налоги
-
-            var c_curr = operations.AsEnumerable()
+            // например Дивиденды и Налоги. Если они есть.
+            if (operations != null)
+            {
+                var c_curr = operations.AsEnumerable()
                         .Select(row => new {
                             Currency = row.Field<string>("Currency")
                         })
                         .Distinct();
 
-            foreach (var cc in c_curr)
-            {
-                this.Instrument = cc.Currency;
-                this.Currency = "";
-                this.ISIN = "";
-                clear_vars();
-                add_dividends(cc.Currency);
-                add_tax(cc.Currency);
-                add_row();
-            }
+                foreach (var cc in c_curr)
+                {
+                    this.Instrument = cc.Currency;
+                    this.Currency = "";
+                    this.ISIN = "";
+                    clear_vars();
+                    add_dividends(cc.Currency);
+                    add_tax(cc.Currency);
+                    add_row();
+                }
+            }                
             /*----------------------------------------------------------------------------*/
         }
     }
