@@ -430,7 +430,7 @@ namespace SberHTMLParser
                     if (deals != null)
                     {
                         curr_List_d = deals.AsEnumerable().Where(i => i["Instrument"].ToString() == Instrument).Select(x => x["Currency"].ToString()).Distinct().ToList();
-                        curr_List = curr_List_p.Concat(curr_List_d).ToList();
+                        curr_List = curr_List_p.Concat(curr_List_d).Distinct().ToList();
                     } else
                     {
                         curr_List = curr_List_p;
