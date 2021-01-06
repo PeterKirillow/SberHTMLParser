@@ -43,6 +43,17 @@ namespace SberHTMLParser
                     DataType = System.Type.GetType($"System.{e[1]}"),
                     Caption = e[2].Replace("{NewLine}", Environment.NewLine)
                 };
+                // добавляем формулу, если она есть в описании колонки
+                if (e.Length > 3) {
+                    int ii = 1;
+                    foreach( string ss in v)
+                    {
+                        var ee = ss.Split(';');
+                        e[3] = e[3].Replace("{"+ee[0]+"}","RC"+ii.ToString());
+                        ii++;
+                    }
+                    column.ExtendedProperties.Add("Formula", "=" + e[3]);
+                }
                 this.table.Columns.Add(column);
             }
         }

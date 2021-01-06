@@ -39,7 +39,9 @@ namespace SberHTMLParser
             HtmlDocument doc;
             string in_file = "";
             string out_file = "";
-            string[] htmlTables;            
+            string[] htmlTables;
+
+            bool ShowAutoFilter = true;
 
             /*----------------------------------------------------------------------------*/
             if (args.Length == 0)
@@ -165,20 +167,43 @@ namespace SberHTMLParser
             va.tables_list.Add(p.T);
             p.calculate();
 
+            // worksheet "PL"
+            PL pl = new PL(va);
+            va.tables_list.Add(pl.T);
+            pl.calculate();
+
 
             // worksheets from list of tables
             foreach (Table t in va.tables_list.OrderBy(o => o.Order))
             {
+
                 ws = wb.Worksheets.Add(t.table, t.WorksheetName);
+
+                /*----------------------------------------------------------------------------*/
+                // добавление формул
+                int c_col = 1;
+                foreach (DataColumn c in t.table.Columns)
+                {
+                    if (c.ExtendedProperties.Count != 0)
+                    {
+                        var rngData = ws.Range(2, c_col, t.table.Rows.Count + 1, c_col);
+                        rngData.LastColumn().FormulaR1C1 = c.ExtendedProperties["Formula"].ToString();
+                    }
+                    c_col++;
+                }
+
+                /*----------------------------------------------------------------------------*/
+                // format columns
                 for (int a=0; a<= t.table.Columns.Count - 1; a++) 
                 {
                     if (t.table.Columns[a].DataType == System.Type.GetType("System.Double")) {
                         ws.Columns(a+1,a+1).Style.NumberFormat.Format = "#,##0.00";
                     }                    
                 }
+
                 ws.Row(1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
                 ws.Row(1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
-                ws.Tables.FirstOrDefault().ShowAutoFilter = false;
+                ws.Tables.FirstOrDefault().ShowAutoFilter = ShowAutoFilter;
                 ws.Columns().AdjustToContents();
             }
 

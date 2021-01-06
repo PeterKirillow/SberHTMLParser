@@ -212,9 +212,8 @@ namespace SberHTMLParser
             /*----------------------------------------------------------------------------*/
 
             /*----------------------------------------------------------------------------*/
-            // all dates to ds_end
+            // all dates to dt_end
             for (DateTime d = dt_begin.AddDays(1); d <= dt_end; d=d.AddDays(1))
-            //for (DateTime d = dt_begin.AddDays(1); d <= dt_begin.AddDays(2); d = d.AddDays(1))
             {
                 // копируем все строки позиции из предыдущего дня
                 // сначала в List, т.к. модифицировать объект внутри foreach нельзы
