@@ -35,6 +35,8 @@ namespace SberHTMLParser
             I = new Table("Prices");
             C = new Table("Rates");
             instruments = (from t in va.tables_list where t.Name == "instruments" select t.table).ToArray().FirstOrDefault();
+            va.tables_list.Add(this.I);
+            va.tables_list.Add(this.C);
         }
 
         /******************************************************************/

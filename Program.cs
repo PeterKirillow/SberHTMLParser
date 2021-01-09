@@ -59,14 +59,15 @@ namespace SberHTMLParser
                     return 1;
                 }
                 // если есть файл с ценами, то будет с ним спариваться !
-                // файл должен иметь определенную структуру                
-                va.tables_list.Add(prices.I);
-                va.tables_list.Add(prices.C);
-                price_file = args[1];
-                if (File.Exists(price_file))
+                // файл должен иметь определенную структуру
+                if (args.Length == 2)
                 {
-                    prices.filePath = price_file;
-                    prices.calculate();
+                    price_file = args[1];
+                    if (File.Exists(price_file))
+                    {
+                        prices.filePath = price_file;
+                        prices.calculate();
+                    }
                 }
             }
             out_file = in_file.Replace(Path.GetExtension(in_file), ".xlsx");
