@@ -14,6 +14,7 @@ namespace SberHTMLParser
     class Program
     {
         public static Variables va = new Variables();
+        public static Prices prices = new Prices(va);
 
         /**************************************************************************/
         // create array of tables from html
@@ -38,6 +39,7 @@ namespace SberHTMLParser
         {
             HtmlDocument doc;
             string in_file = "";
+            string price_file = "";
             string out_file = "";
             string[] htmlTables;
 
@@ -55,6 +57,16 @@ namespace SberHTMLParser
                 {
                     Console.WriteLine($"File {in_file} does not exists");
                     return 1;
+                }
+                // если есть файл с ценами, то будет с ним спариваться !
+                // файл должен иметь определенную структуру                
+                va.tables_list.Add(prices.I);
+                va.tables_list.Add(prices.C);
+                price_file = args[1];
+                if (File.Exists(price_file))
+                {
+                    prices.filePath = price_file;
+                    prices.calculate();
                 }
             }
             out_file = in_file.Replace(Path.GetExtension(in_file), ".xlsx");
@@ -163,15 +175,14 @@ namespace SberHTMLParser
             ws.Columns().AdjustToContents();
 
             // worksheet "Позиция"
-            Position p = new Position(va);
+            Position p = new Position(va, prices);
             va.tables_list.Add(p.T);
             p.calculate();
 
             // worksheet "PL"
-            PL pl = new PL(va);
+            PL pl = new PL(va, prices);
             va.tables_list.Add(pl.T);
             pl.calculate();
-
 
             // worksheets from list of tables
             foreach (Table t in va.tables_list.OrderBy(o => o.Order))
@@ -198,7 +209,7 @@ namespace SberHTMLParser
                 {
                     if (t.table.Columns[a].DataType == System.Type.GetType("System.Double")) {
                         ws.Columns(a+1,a+1).Style.NumberFormat.Format = "#,##0.00";
-                    }                    
+                    }
                 }
 
                 ws.Row(1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);

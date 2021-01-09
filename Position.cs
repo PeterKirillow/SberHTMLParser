@@ -11,6 +11,8 @@ namespace SberHTMLParser
         public Table T;
 
         Variables va;
+        Prices prices;
+
         DataTable instruments;
         DataTable money;
         DataTable portfolio;
@@ -18,10 +20,12 @@ namespace SberHTMLParser
         DataTable deals;
         DataTable operations_other;
 
+
         /******************************************************************/
-        public Position(Variables va)
+        public Position(Variables va, Prices prices)
         {
             this.va = va;
+            this.prices = prices;
             T = new Table("position");
         }
 
@@ -34,7 +38,11 @@ namespace SberHTMLParser
         /******************************************************************/
         private void delete_row(DateTime d)
         {
-            var query = from r in T.table.AsEnumerable() where r.Field<DateTime>("Date") == d && Math.Round(r.Field<Double>("Quantity"),4) == 0 select r;
+            var query = from r in T.table.AsEnumerable() where r.Field<DateTime>("Date") == d
+                        && Math.Round(r.Field<double?>("Quantity") ?? 0 , 4) == 0
+                        && Math.Round(r.Field<double?>("AmountIn") ?? 0 , 4) == 0
+                        && Math.Round(r.Field<double?>("AmountOut") ?? 0 , 4) == 0
+                        select r;
             foreach (var row in query.ToList()) { row.Delete(); }
         }
 
@@ -47,24 +55,28 @@ namespace SberHTMLParser
                 var pos = from r in T.table.AsEnumerable() where r.Field<DateTime>("Date") == d select r;
 
                 // всe операции на дату сгрупированные по Дате, Площадке, Валюте
-                var op = from r in operations.AsEnumerable()
-                         where r.Field<DateTime>("Date") == d
-                         group new { Amount = r.Field<double>("AmountIn") - r.Field<double>("AmountOut") }
+                var op = from r in operations.AsEnumerable() where r.Field<DateTime>("Date") == d
+                         group new { Amount = r.Field<double>("AmountIn") - r.Field<double>("AmountOut"), AmountIn = r.Field<double>("AmountIn"), AmountOut = r.Field<double>("AmountOut") }
                          by new { TradingSys = r.Field<string>("TradingSys"), Currency = r.Field<string>("Currency") }
-                         into g select new { g.Key.TradingSys, g.Key.Currency, Amount = g.Sum(x => x.Amount) };
+                         into g select new { g.Key.TradingSys, g.Key.Currency, Amount = g.Sum(x => x.Amount), AmountIn = g.Sum(x => x.AmountIn), AmountOut = g.Sum(x => x.AmountOut) };
 
                 // Запрос для апдейта существующих строк в позиции
                 var j =
                     from p in pos join o in op
                      on new { TradingSys = p.Field<string>("TradingSys"), Currency = p.Field<string>("Instrument") } equals new { TradingSys = o.TradingSys, Currency = o.Currency }
-                    select new { DataRow = p, Qty = p.Field<double>("Quantity") + o.Amount };
-                foreach (var x in j) x.DataRow["Quantity"] = x.Qty;
+                    select new { DataRow = p, Qty = p.Field<double>("Quantity") + o.Amount, Currency = o.Currency, AmountIn = o.AmountIn, AmountOut = o.AmountOut };
+                foreach (var x in j)
+                {
+                    x.DataRow["Quantity"] = x.Qty;
+                    x.DataRow["AmountIn"] = x.AmountIn;
+                    x.DataRow["AmountOut"] = x.AmountOut;
+                }
 
                 // Вставляем новые строки из операций
                 var n = from o in op.AsEnumerable()
                         where !pos.AsEnumerable().Any(p => o.TradingSys == p.Field<String>("TradingSys") && o.Currency == p.Field<String>("Instrument"))
                         select o;
-                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Currency, "", x.Amount.ToString() }); }
+                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Currency, "", x.Amount.ToString(), x.AmountIn.ToString(), x.AmountOut.ToString(), "0", "0" }); }
             }
         }
 
@@ -101,7 +113,7 @@ namespace SberHTMLParser
                             ISIN = i.Field<string>("ISIN"),
                             Quantity = o.Quantity
                         };
-                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, x.ISIN , x.Quantity.ToString() }); }
+                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, x.ISIN , x.Quantity.ToString(), "0", "0" }); }
             }
         }
 
@@ -148,7 +160,7 @@ namespace SberHTMLParser
                             ISIN = i.Field<string>("ISIN"),
                             Quantity = o.Quantity
                         };
-                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, x.ISIN, x.Quantity.ToString() }); }
+                foreach (var x in n) { add_row(new string[] { x.TradingSys, d.ToString(), x.Instrument, x.ISIN, x.Quantity.ToString(), "0", "0" }); }
             }
         }
 
@@ -183,7 +195,7 @@ namespace SberHTMLParser
                     ISIN = i.Field<string>("ISIN"),
                     PeriodBeginQuantity = r.Field<double>("PeriodBeginQuantity"),
                 };
-            foreach (var o in instruments_quey) { add_row(new string[] { o.TradingSys, dt_begin.ToString(), o.Instrument, o.ISIN, o.PeriodBeginQuantity.ToString() }); }
+            foreach (var o in instruments_quey) { add_row(new string[] { o.TradingSys, dt_begin.ToString(), o.Instrument, o.ISIN, o.PeriodBeginQuantity.ToString(), "0", "0" }); }
 
             // money (grouped by TradingSys)
             var money_query =
@@ -202,7 +214,9 @@ namespace SberHTMLParser
                     g.Key.Currency,
                     Qty = g.Sum(x => x.Qty),
                 };
-            foreach (var o in money_query) { add_row(new string[] {o.TradingSys, dt_begin.ToString() , o.Currency, "", o.Qty.ToString()}); }
+            foreach (var o in money_query) { 
+                add_row(new string[] { o.TradingSys, dt_begin.ToString(), o.Currency, "", o.Qty.ToString(), "0", "0" });
+            }
 
             // add today operations
             add_operations(dt_begin);
@@ -213,7 +227,7 @@ namespace SberHTMLParser
 
             /*----------------------------------------------------------------------------*/
             // all dates to dt_end
-            for (DateTime d = dt_begin.AddDays(1); d <= dt_end; d=d.AddDays(1))
+            for (DateTime d = dt_begin.AddDays(1); d <= dt_end; d = d.AddDays(1))
             {
                 // копируем все строки позиции из предыдущего дня
                 // сначала в List, т.к. модифицировать объект внутри foreach нельзы
@@ -221,8 +235,8 @@ namespace SberHTMLParser
                 var pos = from r in T.table.AsEnumerable() where r.Field<DateTime>("Date") == d.AddDays(-1) select r;
                 foreach (var x in pos)
                 {
-                    s.Add(new string[] { x.Field<string>("TradingSys"), d.ToString(), x.Field<string>("Instrument"), x.Field<string>("ISIN"), x.Field<double>("Quantity").ToString() });
-                }                    
+                    s.Add(new string[] { x.Field<string>("TradingSys"), d.ToString(), x.Field<string>("Instrument"), x.Field<string>("ISIN"), x.Field<double>("Quantity").ToString(), "0", "0" });
+                }
                 // теперь переносим строки из списка в таблицу позиции
                 foreach (string[] ss in s)
                 {
@@ -238,6 +252,63 @@ namespace SberHTMLParser
             }
             /*----------------------------------------------------------------------------*/
 
+            /*----------------------------------------------------------------------------*/
+            // добавляем переоценку
+            double Price;
+            String PriceCurrency;
+            double Nominal;
+            String NominalCurrency;
+            double Accrued;
+
+            // add prices
+            var xx1 = from r in T.table.AsEnumerable()
+                    join p in prices.I.table.AsEnumerable() on new { ISIN = r.Field<string>("ISIN"), Date = r.Field<DateTime>("Date") } equals new { ISIN = p.Field<string>("ISIN"), Date = p.Field<DateTime>("Date")  }
+                    where r.Field<string>("ISIN") != ""
+            select new
+            {
+                DataRow = r,
+                Price = p.Field<double?>("Price"),
+                PriceCurrency = p.Field<String>("PriceCurrency"),
+                Nominal = p.Field<double?>("Nominal"),
+                NominalCurrency = p.Field<String>("NominalCurrency")
+            };
+
+            foreach (var r in xx1)
+            {
+                r.DataRow["PriceCurrency"] = r.PriceCurrency;
+                r.DataRow["Price"] = r.Price;
+                r.DataRow["NominalCurrency"] = r.NominalCurrency;
+                r.DataRow["Nominal"] = r.Nominal;
+            }
+
+            // convert to RUB
+            var i1 = from r in instruments.AsEnumerable() select new { Instrument = r.Field<string>("Instrument"), Type = r.Field<string>("Type") };
+            var i2 = from r in T.table.AsEnumerable() where r.Field<string>("ISIN") == "" select new { Instrument = r.Field<string>("Instrument"), Type = "" };
+            
+            var xx2 = from r in T.table.AsEnumerable()
+                      join i in i1.Union(i2).Distinct().AsEnumerable() on r.Field<string>("Instrument") equals i.Instrument
+                      join p in prices.C.table.AsEnumerable() on new { 
+                          Currency = (r.Field<string>("ISIN") == "" ? r.Field<string>("Instrument") : (i.Type.ToLower().Contains("облигация") ? r.Field<string>("NominalCurrency") : r.Field<string>("PriceCurrency"))),
+                          Date = r.Field<DateTime>("Date")
+                      } equals new { Currency = p.Field<string>("Instrument"), Date = p.Field<DateTime>("Date") }
+                      select new
+                      {
+                         DataRow = r,
+                         Qty = r.Field<double?>("Quantity"),
+                         Price = r.Field<double?>("Price"),
+                         Nominal = r.Field<double?>("Nominal"),
+                         IsBond = (i.Type.ToLower().Contains("облигация") ? 1 : 0),
+                         Course2RUB = p.Field<double?>("Course2RUB"),
+                         Course2USD = p.Field<double?>("Course2USD")
+                      };
+
+            foreach (var r in xx2)
+            {
+                r.DataRow["AmountCUR"] = (r.DataRow["ISIN"].Equals("") ? r.Qty : (r.Qty * r.Price * (r.IsBond == 1 ? r.Nominal : 1) / (r.IsBond == 1 ? 100 : 1)));
+                r.DataRow["AmountRUB"] = (r.DataRow["ISIN"].Equals("") ? r.Qty / r.Course2RUB : (r.Qty * r.Price * (r.IsBond == 1? r.Nominal : 1) / (r.IsBond == 1 ? 100 : 1)) / r.Course2RUB);
+            }
+
+            /*----------------------------------------------------------------------------*/
         }
 
     }

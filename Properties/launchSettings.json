@@ -2,7 +2,7 @@
   "profiles": {
     "SberHTMLParser": {
       "commandName": "Project",
-      "commandLineArgs": "E:\\DATA\\test\\qq.html"
+      "commandLineArgs": "E:\\DATA\\test\\qq.html E:\\DATA\\test\\prices.xlsx"
     }
   }
 }

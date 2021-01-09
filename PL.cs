@@ -11,6 +11,7 @@ namespace SberHTMLParser
         public Table T;
 
         Variables va;
+        Prices prices;
 
         DataTable instruments;
         DataTable money_out;
@@ -22,6 +23,7 @@ namespace SberHTMLParser
 
         String Instrument = "";
         String ISIN = "";
+        String PortfolioCurrency = "";
         String Currency = "";
 
         DateTime MinDate = new DateTime();
@@ -48,17 +50,16 @@ namespace SberHTMLParser
         bool IsBond = false;
 
         /******************************************************************/
-        public PL(Variables va)
+        public PL(Variables va, Prices prices)
         {
             this.va = va;
+            this.prices = prices;
             T = new Table("PL");
         }
 
         /******************************************************************/
         private void clear_vars()
         {
-            MinDate = DateTime.Parse("01.01.1970");
-            MaxDate = DateTime.Parse("01.01.1970");
             NominalBegin = 0;
             AvgPriceBegin = 0;
             AmountBegin = 0;
@@ -110,33 +111,6 @@ namespace SberHTMLParser
         }
 
         /******************************************************************/
-        private void update_row(String instr, String curr)
-        {
- 
-            var query = from r in T.table.AsEnumerable() where r.Field<String>("Instrument") == instr && r.Field<String>("Currency") == curr select r;
-            foreach (var row in query.ToList()) { 
-                row["DateBegin"] = MinDate;
-                row["QtyBegin"] = QtyBegin;
-                row["AmountBegin"] = AmountBegin;
-                row["NominalBegin"] = NominalBegin;
-                row["AvgPriceBegin"] = AvgPriceBegin;
-                row["BuyQty"] = BuyQty;
-                row["BuyAmounnt"] = BuyAmount;
-                row["SellQty"] = SellQty;
-                row["SellAmount"] = SellAmount;
-                row["CommBrok"] = CommBrok;
-                row["CommExch"] = CommExch;
-                row["Coupons"] = Coupons;
-                row["Dividends"] = Dividends;
-                row["Tax"] = Tax;
-                row["Repaiment"] = Repaiment;
-                row["DateEnd"] = MaxDate;
-                row["QtyEnd"] = QtyEnd;
-                row["AmountEnd"] = AmountEnd;
-            }
-        }
-
-        /******************************************************************/
         private void position_from_portfolio (String instr, String curr)
         {
             // если есть позиция на начало периода в отчете в таблице "Портфель Ценных Бумаг",
@@ -177,48 +151,69 @@ namespace SberHTMLParser
                     
                 }
             }
-        }
+        }        
 
         /******************************************************************/
         private void add_inoperations(String instr, String mode)
         {
-            // это вводы инструментов. они идут без цены и их оценивать придется руками 
-            // ввод на начальную дату позиции помещаем в QtyBegin
-            // все остальные вооды суммируем в BuqQty
-            // !!!!!! как выглядят выводы бумаг - не видел, по этой причине не реализовано
-            // Уведомляем в консоли о том, что есть вводы, чтобы было понятно на что обратить внимание
             DateTime dt_begin = (mode == "begin" ? MinDate : MinDate.AddDays(1));
             DateTime dt_end = (mode == "begin" ? MinDate : MaxDate);
 
-            if ( operations_other != null)
+            double Price;
+            String PriceCurrency;
+            double Nominal;
+            String NominalCurrency;
+            double Accrued;
+
+            /*
+             * проходим по каждой строчке ввода
+             * если это первая дата, то заполняем только данные на начало
+             * иначе суммируем вводы в кол-вах и в деньгах
+             * пробуем получить на каждый день цену из таблички Prices, если они там есть. Если цена найдена и валюта цены совпадает с валютой строки позиции, то считаем Amounnt
+             */
+            var x = from r in operations_other.AsEnumerable()
+                    join i in instruments.AsEnumerable() on r.Field<string>("Instrument") equals i.Field<string>("Instrument")
+                    where r.Field<DateTime>("DateOperation") >= dt_begin && r.Field<DateTime>("DateOperation") <= dt_end
+                            && r.Field<String>("Instrument") == instr
+                            && r.Field<String>("Type").Contains("Перевод ЦБ")
+                    select new
+                    {
+                        Date = r.Field<DateTime>("DateOperation"),
+                        Instrument = r.Field<string>("Instrument"),
+                        ISIN = i.Field<string>("ISIN"),
+                        QtyBegin = (mode == "begin" ? r.Field<double>("Quantity") : 0),
+                        QtyBuy = (mode == "begin" ? 0 : r.Field<double>("Quantity"))
+                    };
+            foreach (var s in x)
             {
-                var x = from r in operations_other.AsEnumerable()
-                        where r.Field<DateTime>("DateOperation") >= dt_begin && r.Field<DateTime>("DateOperation") <= dt_end
-                              && r.Field<String>("Instrument") == instr && r.Field<String>("Type").Contains("Перевод ЦБ")
-                        group new { 
-                            QtyBegin = (mode == "begin" ? r.Field<double>("Quantity") : 0),
-                            QtyBuy = (mode == "begin" ? 0 : r.Field<double>("Quantity"))
-                        }
-                        by new { Date = r.Field<DateTime>("DateOperation"), Instrument = r.Field<string>("Instrument") }
-                        into g select new {
-                            g.Key.Date,
-                            g.Key.Instrument,
-                            QtyBegin = g.Sum(x => x.QtyBegin),
-                            QtyBuy = g.Sum(x => x.QtyBuy)
-                        };
-                if (x.Any())
+                String[] s_prices = prices.get_price(s.ISIN, s.Date);
+                QtyBegin = QtyBegin + s.QtyBegin;
+                BuyQty = BuyQty + s.QtyBuy;
+                if ( ( s_prices[0] ?? "" ) != "")
                 {
-                    QtyBegin = QtyBegin + x.First().QtyBegin;
-                    BuyQty = BuyQty + x.First().QtyBuy;
-                    if (x.First().QtyBegin != 0)
+                    Price = Convert.ToDouble(s_prices[0]);
+                    PriceCurrency = s_prices[1];
+                    Nominal = Convert.ToDouble(s_prices[2]);
+                    NominalCurrency = s_prices[3];
+                    Accrued = Convert.ToDouble(s_prices[4]);
+                    if ( this.Currency == ( IsBond ? NominalCurrency : PriceCurrency))
                     {
-                        Console.WriteLine($"Ввод ЦБ [{x.First().Instrument}] {x.First().Date.ToShortDateString()} в количистве {QtyBegin}");
-                    } else if (x.First().QtyBuy != 0)
-                    {
-                        Console.WriteLine($"Ввод ЦБ [{x.First().Instrument}] в перид с {dt_begin.ToShortDateString()} по {dt_end.ToShortDateString()} в количистве {BuyQty}");
+                        if (mode == "begin")
+                        {
+                            AmountBegin = (QtyBegin * Price * (IsBond ? Nominal : 1) / (IsBond ? 100 : 1) + (IsBond ? Accrued : 0));
+                            NominalBegin = Nominal;
+                            AvgPriceBegin = Price;
+                        } else
+                        {
+                            BuyAmount = (BuyQty * Price * (IsBond ? Nominal : 1) / (IsBond ? 100 : 1) + (IsBond ? Accrued : 0));
+                        }
                     }
-                }
-            }            
+                    Console.WriteLine($"Ввод инструмента {Instrument} - ({s.Date.ToShortDateString()}, price: {Price}, pricecurrency: {PriceCurrency}, nominal: {Nominal}, nominalcurrency: {NominalCurrency})");
+                } else
+                {
+                    Console.WriteLine($"Ввод инструмента {Instrument} на дату {s.Date.ToShortDateString()} цена не найдена");
+                }                
+            }
         }
 
         /******************************************************************/
@@ -236,6 +231,8 @@ namespace SberHTMLParser
             if (deals != null)
             {
                 var x = from r in deals.AsEnumerable()
+                        join i in instruments.AsEnumerable() on r.Field<string>("Instrument") equals i.Field<string>("Instrument")
+                        //join c in rates.AsEnumerable() on r.Field<string>("Currency") equals c.Field<string>("Instrument")
                         where r.Field<DateTime>("DateSettlement") >= dt_begin && r.Field<DateTime>("DateSettlement") <= dt_end
                               && r.Field<String>("Instrument") == instr && r.Field<String>("Currency") == curr
                         group new
@@ -414,39 +411,80 @@ namespace SberHTMLParser
                 bool contains = position.AsEnumerable().Any(row => Instrument == row.Field<String>("Instrument"));
                 if ( contains )
                 {
-                    clear_vars();
+                    MinDate = DateTime.Parse("01.01.1970");
+                    MaxDate = DateTime.Parse("01.01.1970");
 
                     // минимальная и максимальня даты по инструменту в позиции. Т.к. берем из сформированной нами ранее позиции, то точно уверены в датах
                     MinDate = (from r in position.AsEnumerable() where r.Field<String>("Instrument") == Instrument select r.Field<DateTime>("Date")).Min();
                     MaxDate = (from r in position.AsEnumerable() where r.Field<String>("Instrument") == Instrument select r.Field<DateTime>("Date")).Max();
 
-                    // валюты инструмента из входящих остатков и сделок
-                    // дело в том, что есть вводы инструментов, они идут только в количестве, но без оценки на дату ввода и валюты
-                    // надо создать строку с инструментом с валютой, в которой он торгуется.
-                    List<string> curr_List;
-                    List<string> curr_List_p;
-                    List<string> curr_List_d;
-                    curr_List_p = portfolio.AsEnumerable().Where(i => i["Instrument"].ToString() == Instrument ).Select(x => x["Currency"].ToString()).Distinct().ToList();
+                    /* нам не нужен зоопарк с валютами в портфеле и движениях по инструменту
+                     * например инструмент купили  на вгнебирже за USD, но в портфеле Сбер оценивает его в рублях
+                     * мли гипотетически в портфеле на начало оценка в рублях, потом покупки в дроугой валюте, оценка на конец тоже в рублях
+                     * надо привести к одной валюте - вероятно это будет та валюта, которая изначально есть в таблице "Портфель ЦБ"
+                     * конвертация к валюте портфеля потребуется в сделках, операциях, выплатах на внешний счет
+                     */
+                    List<string> curr_List = new List<string>();
+                    List<string> list = new List<string>();
+                    // собираем весь вписок валют по инструменту
+                    // из Портфеля
+                    if (portfolio != null)
+                    {
+                        list = portfolio.AsEnumerable().Where(i => i["Instrument"].ToString() == Instrument).Select(c => c["Currency"].ToString()).Distinct().ToList();
+                        curr_List = curr_List.Concat(list ?? new List<string>()).Distinct().ToList();
+                        this.PortfolioCurrency = (list.Count != 0 ? curr_List[0] : "");
+                    }
+                    // из сделок
                     if (deals != null)
                     {
-                        curr_List_d = deals.AsEnumerable().Where(i => i["Instrument"].ToString() == Instrument).Select(x => x["Currency"].ToString()).Distinct().ToList();
-                        curr_List = curr_List_p.Concat(curr_List_d).Distinct().ToList();
+                        list = deals.AsEnumerable().Where(i => i["Instrument"].ToString() == Instrument).Select(x => x["Currency"].ToString()).Distinct().ToList();
+                        curr_List = curr_List.Concat(list ?? new List<string>()).Distinct().ToList();
+                    }
+                    // из операций
+                    if (operations != null)
+                    {
+                        list = operations.AsEnumerable().Where(i => i["Description"].ToString().Contains(Instrument)).Select(x => x["Currency"].ToString()).Distinct().ToList();
+                        curr_List = curr_List.Concat(list ?? new List<string>()).Distinct().ToList();
+                    }
+                    // из выводов на внешний счет
+                    if (money_out != null)
+                    {
+                        list = money_out.AsEnumerable().Where(i => i["Description"].ToString().Contains(Instrument)).Select(x => x["Currency"].ToString()).Distinct().ToList();
+                        curr_List = curr_List.Concat(list ?? new List<string>()).Distinct().ToList();
+                    }
+                    
+                    // итак, если у нас всего одна валюта - это хорошо
+                    // если больше, то смотрим, не заполниоли ли мы ранее валлюту из портфеля, если да, то оставляем ее, если нет, то делаем основной валютой первую из доступных
+                    // вариант, когда валют больше 2-х, не хочу даже рассматривать.
+                    // надой найти приемлемое решение
+                    if (curr_List.Count == 1)
+                    {
+                        this.PortfolioCurrency = curr_List[0];
                     } else
                     {
-                        curr_List = curr_List_p;
+                        PortfolioCurrency = (PortfolioCurrency == "" ? curr_List[0] : PortfolioCurrency);
+                        Console.WriteLine($"Инструмент {Instrument} представлен в нескольких валютах: {string.Join(',',curr_List)}");
                     }
 
                     foreach (var c in curr_List)
                     {
-                        this.Currency = c;                       
+                        this.Currency = c;
+                        clear_vars();
+
+                        // загрузка из Портфеля ЦБ должно идти на первом месте
                         position_from_portfolio(Instrument, Currency);
+
+                        // !! потенциально, если случились вводы инструмента, у которого несколько валют в движениях, то это задвоит значения ввода !!
+                        // вопрос нужно решить принудительной конвертацией множества валют к единой
                         add_inoperations(Instrument, "begin");
                         add_inoperations(Instrument, "all");
+
                         add_deals(Instrument, Currency, "begin");
                         add_deals(Instrument, Currency, "all");
                         add_coupons(Instrument, Currency);
                         add_coupons_ext(Instrument, Currency);
                         add_repaiments(Instrument, Currency);
+
                         add_row();
                     }
                     
@@ -460,11 +498,7 @@ namespace SberHTMLParser
             // например Дивиденды и Налоги. Если они есть.
             if (operations != null)
             {
-                var c_curr = operations.AsEnumerable()
-                        .Select(row => new {
-                            Currency = row.Field<string>("Currency")
-                        })
-                        .Distinct();
+                var c_curr = operations.AsEnumerable().Select(row => new {Currency = row.Field<string>("Currency")}).Distinct();
 
                 foreach (var cc in c_curr)
                 {
