@@ -165,54 +165,59 @@ namespace SberHTMLParser
             String NominalCurrency;
             double Accrued;
 
-            /*
-             * проходим по каждой строчке ввода
-             * если это первая дата, то заполняем только данные на начало
-             * иначе суммируем вводы в кол-вах и в деньгах
-             * пробуем получить на каждый день цену из таблички Prices, если они там есть. Если цена найдена и валюта цены совпадает с валютой строки позиции, то считаем Amounnt
-             */
-            var x = from r in operations_other.AsEnumerable()
-                    join i in instruments.AsEnumerable() on r.Field<string>("Instrument") equals i.Field<string>("Instrument")
-                    where r.Field<DateTime>("DateOperation") >= dt_begin && r.Field<DateTime>("DateOperation") <= dt_end
-                            && r.Field<String>("Instrument") == instr
-                            && r.Field<String>("Type").Contains("Перевод ЦБ")
-                    select new
-                    {
-                        Date = r.Field<DateTime>("DateOperation"),
-                        Instrument = r.Field<string>("Instrument"),
-                        ISIN = i.Field<string>("ISIN"),
-                        QtyBegin = (mode == "begin" ? r.Field<double>("Quantity") : 0),
-                        QtyBuy = (mode == "begin" ? 0 : r.Field<double>("Quantity"))
-                    };
-            foreach (var s in x)
+            if (operations_other != null)
             {
-                String[] s_prices = prices.get_price(s.ISIN, s.Date);
-                QtyBegin = QtyBegin + s.QtyBegin;
-                BuyQty = BuyQty + s.QtyBuy;
-                if ( ( s_prices[0] ?? "" ) != "")
+                /*
+                 * проходим по каждой строчке ввода
+                 * если это первая дата, то заполняем только данные на начало
+                 * иначе суммируем вводы в кол-вах и в деньгах
+                 * пробуем получить на каждый день цену из таблички Prices, если они там есть. Если цена найдена и валюта цены совпадает с валютой строки позиции, то считаем Amounnt
+                 */
+                var x = from r in operations_other.AsEnumerable()
+                        join i in instruments.AsEnumerable() on r.Field<string>("Instrument") equals i.Field<string>("Instrument")
+                        where r.Field<DateTime>("DateOperation") >= dt_begin && r.Field<DateTime>("DateOperation") <= dt_end
+                                && r.Field<String>("Instrument") == instr
+                                && r.Field<String>("Type").Contains("Перевод ЦБ")
+                        select new
+                        {
+                            Date = r.Field<DateTime>("DateOperation"),
+                            Instrument = r.Field<string>("Instrument"),
+                            ISIN = i.Field<string>("ISIN"),
+                            QtyBegin = (mode == "begin" ? r.Field<double>("Quantity") : 0),
+                            QtyBuy = (mode == "begin" ? 0 : r.Field<double>("Quantity"))
+                        };
+                foreach (var s in x)
                 {
-                    Price = Convert.ToDouble(s_prices[0]);
-                    PriceCurrency = s_prices[1];
-                    Nominal = Convert.ToDouble(s_prices[2]);
-                    NominalCurrency = s_prices[3];
-                    Accrued = Convert.ToDouble(s_prices[4]);
-                    if ( this.Currency == ( IsBond ? NominalCurrency : PriceCurrency))
+                    String[] s_prices = prices.get_price(s.ISIN, s.Date);
+                    QtyBegin = QtyBegin + s.QtyBegin;
+                    BuyQty = BuyQty + s.QtyBuy;
+                    if ((s_prices[0] ?? "") != "")
                     {
-                        if (mode == "begin")
+                        Price = Convert.ToDouble(s_prices[0]);
+                        PriceCurrency = s_prices[1];
+                        Nominal = Convert.ToDouble(s_prices[2]);
+                        NominalCurrency = s_prices[3];
+                        Accrued = Convert.ToDouble(s_prices[4]);
+                        if (this.Currency == (IsBond ? NominalCurrency : PriceCurrency))
                         {
-                            AmountBegin = (QtyBegin * Price * (IsBond ? Nominal : 1) / (IsBond ? 100 : 1) + (IsBond ? Accrued : 0));
-                            NominalBegin = Nominal;
-                            AvgPriceBegin = Price;
-                        } else
-                        {
-                            BuyAmount = (BuyQty * Price * (IsBond ? Nominal : 1) / (IsBond ? 100 : 1) + (IsBond ? Accrued : 0));
+                            if (mode == "begin")
+                            {
+                                AmountBegin = (QtyBegin * Price * (IsBond ? Nominal : 1) / (IsBond ? 100 : 1) + (IsBond ? Accrued : 0));
+                                NominalBegin = Nominal;
+                                AvgPriceBegin = Price;
+                            }
+                            else
+                            {
+                                BuyAmount = (BuyQty * Price * (IsBond ? Nominal : 1) / (IsBond ? 100 : 1) + (IsBond ? Accrued : 0));
+                            }
                         }
+                        Console.WriteLine($"Ввод инструмента {Instrument} - ({s.Date.ToShortDateString()}, price: {Price}, pricecurrency: {PriceCurrency}, nominal: {Nominal}, nominalcurrency: {NominalCurrency})");
                     }
-                    Console.WriteLine($"Ввод инструмента {Instrument} - ({s.Date.ToShortDateString()}, price: {Price}, pricecurrency: {PriceCurrency}, nominal: {Nominal}, nominalcurrency: {NominalCurrency})");
-                } else
-                {
-                    Console.WriteLine($"Ввод инструмента {Instrument} на дату {s.Date.ToShortDateString()} цена не найдена");
-                }                
+                    else
+                    {
+                        Console.WriteLine($"Ввод инструмента {Instrument} на дату {s.Date.ToShortDateString()} цена не найдена");
+                    }
+                }
             }
         }
 
