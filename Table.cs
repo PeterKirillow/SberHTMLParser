@@ -8,11 +8,12 @@ namespace SberHTMLParser
 {
     class Table
     {
-        public DataTable table = null;  //
-        public string Name;             //
-        public string WorksheetName;    //
-        public int Order;               // порядок следвания таблиц при создании экселя
-        int skip = 1;                   // сколько строк заголовка таблицы пропускаем
+        public  DataTable   table = null;
+        public  string      Name;
+        public  string      WorksheetName;
+        public  int         Order;               // порядок следвания таблиц при создании экселя
+        private int         skip = 1;            // сколько строк заголовка таблицы пропускаем
+        public  bool        IsEmpty = false;     // если есть определение критериев таблицы, но нет определения самой таблицы
 
         /******************************************************************/
         public Table(string name)
@@ -22,7 +23,7 @@ namespace SberHTMLParser
             this.table = new DataTable(name);
 
             DataColumn column = null;
-
+            
             // создание колонок в таблице на основании данных из конфигурационнго файла
             string s_skip = ConfigurationManager.AppSettings.Get(this.Name + ":skip");
             if (s_skip != null) { this.skip = Convert.ToInt32(s_skip); }
@@ -34,27 +35,37 @@ namespace SberHTMLParser
             if (s_wsname != null && s_wsname != "") { this.WorksheetName = s_wsname; } else { this.WorksheetName = this.Name;  }
 
             string[] v = ConfigurationManager.AppSettings.AllKeys.Where(key => key.StartsWith(this.Name + ".")).Select(key => ConfigurationManager.AppSettings[key]).ToArray(); ;
-            foreach (string s in v)
+            
+            if (v.Length != 0)
             {
-                var e = s.Split(';');
-                column = new DataColumn
+                
+                foreach (string s in v)
                 {
-                    ColumnName = e[0],
-                    DataType = System.Type.GetType($"System.{e[1]}"),
-                    Caption = e[2].Replace("{NewLine}", Environment.NewLine)
-                };
-                // добавляем формулу, если она есть в описании колонки
-                if (e.Length > 3) {
-                    int ii = 1;
-                    foreach( string ss in v)
+                    var e = s.Split(';');
+                    column = new DataColumn
                     {
-                        var ee = ss.Split(';');
-                        e[3] = e[3].Replace("{"+ee[0]+"}","RC"+ii.ToString());
-                        ii++;
+                        ColumnName = e[0],
+                        DataType = System.Type.GetType($"System.{e[1]}"),
+                        Caption = e[2].Replace("{NewLine}", Environment.NewLine)
+                    };
+                    // добавляем формулу, если она есть в описании колонки
+                    if (e.Length > 3)
+                    {
+                        int ii = 1;
+                        foreach (string ss in v)
+                        {
+                            var ee = ss.Split(';');
+                            e[3] = e[3].Replace("{" + ee[0] + "}", "RC" + ii.ToString());
+                            ii++;
+                        }
+                        column.ExtendedProperties.Add("Formula", "=" + e[3]);
                     }
-                    column.ExtendedProperties.Add("Formula", "=" + e[3]);
+                    this.table.Columns.Add(column);
                 }
-                this.table.Columns.Add(column);
+            } else
+            {
+                // не нашли определения колонок таблицы
+                this.IsEmpty = true;
             }
         }
         /*----------*/

@@ -132,22 +132,25 @@ namespace SberHTMLParser
                     string columns_content = e[4];
 
                     var header = nodes[h_row].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
+                    
                     if (header.Length == h_length)
-                    {
+                    {                        
                         int found = 0;
                         var c = columns.Split('#');
                         for (int ii=1; ii<= c.Length; ii++)
                         {
                             if (header[Convert.ToInt32(c[ii-1])].Contains(columns_content.Split('#')[ii-1]))
-                            {
+                            {                                
                                 found++;
                             }
+                        }                        
+                        if (found == c.Length) { 
+                            T = new Table(table_name);
                         }
-                        if (found == c.Length) { T = new Table(table_name); }
                     }
                 }
 
-                if ( T != null)
+                if ( T != null && !T.IsEmpty)
                 {
                     T.addrows_from_nodes(nodes);
                     va.tables_list.Add(T);
