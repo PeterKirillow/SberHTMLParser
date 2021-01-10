@@ -1,44 +1,53 @@
-﻿using System;
-using HtmlAgilityPack;
+﻿using HtmlAgilityPack;
+using System;
+using System.Configuration;
 using System.Data;
 using System.Linq;
-using System.Configuration;
+
+/*
+ * класс, определяющий Таблицу
+ * Определение колонок таблицы находится в конфигурационном файле
+ */
 
 namespace SberHTMLParser
 {
     class Table
     {
-        public  DataTable   table = null;
-        public  string      Name;
-        public  string      WorksheetName;
-        public  int         Order;               // порядок следвания таблиц при создании экселя
-        private int         skip = 1;            // сколько строк заголовка таблицы пропускаем
-        public  bool        IsEmpty = false;     // если есть определение критериев таблицы, но нет определения самой таблицы
+        public DataTable table;              // таблица DataTable
+        public string Name;               // название таблицы для внутреннего использования
+        public string WorksheetName;      // как будет называться закладка в экселе
+        public int Order;              // порядок следвания таблиц при создании экселя
+        private int skip = 1;           // сколько строк заголовка таблицы пропускаем
+        public bool IsEmpty = false;    // если есть определение критериев таблицы, но нет определения самой таблицы
 
         /******************************************************************/
         public Table(string name)
         {
             this.Name = name;
-            this.Order = 100;
+            this.Order = 100;                   // порядок следования в экселе по умолчанию, если не определено
             this.table = new DataTable(name);
 
+            String _str;
             DataColumn column = null;
-            
+
             // создание колонок в таблице на основании данных из конфигурационнго файла
-            string s_skip = ConfigurationManager.AppSettings.Get(this.Name + ":skip");
-            if (s_skip != null) { this.skip = Convert.ToInt32(s_skip); }
+            // кол-во строк, которые пропускаем как заголовок
+            _str = ConfigurationManager.AppSettings.Get(this.Name + ":skip");
+            if (_str != null) { this.skip = Convert.ToInt32(_str); }
 
-            string s_order = ConfigurationManager.AppSettings.Get(this.Name + ":order");
-            if (s_order != null) { this.Order = Convert.ToInt32(s_order); }
+            // порядок следования в экселе
+            _str = ConfigurationManager.AppSettings.Get(this.Name + ":order");
+            if (_str != null) { this.Order = Convert.ToInt32(_str); }
 
-            string s_wsname = ConfigurationManager.AppSettings.Get(this.Name + ":caption");
-            if (s_wsname != null && s_wsname != "") { this.WorksheetName = s_wsname; } else { this.WorksheetName = this.Name;  }
+            // наименование закладки в экселе, если есть, иначе закладка будет называться как имя самой таблицы
+            _str = ConfigurationManager.AppSettings.Get(this.Name + ":caption");
+            if (_str != null && _str != "") { this.WorksheetName = _str; } else { this.WorksheetName = this.Name; }
 
+            // все параметры начинающиеся с "name."
             string[] v = ConfigurationManager.AppSettings.AllKeys.Where(key => key.StartsWith(this.Name + ".")).Select(key => ConfigurationManager.AppSettings[key]).ToArray(); ;
-            
+
             if (v.Length != 0)
             {
-                
                 foreach (string s in v)
                 {
                     var e = s.Split(';');
@@ -62,13 +71,13 @@ namespace SberHTMLParser
                     }
                     this.table.Columns.Add(column);
                 }
-            } else
+            }
+            else
             {
-                // не нашли определения колонок таблицы
+                // не нашли определения колонок таблицы, помечаем таблицу как пустую
                 this.IsEmpty = true;
             }
         }
-        /*----------*/
 
         /******************************************************************/
         public void addrows_from_nodes(HtmlNodeCollection n)
@@ -118,6 +127,6 @@ namespace SberHTMLParser
                 }
             }
         }
-        /*----------*/
+
     }
 }

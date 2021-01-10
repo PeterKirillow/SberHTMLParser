@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace SberHTMLParser
 {
@@ -12,10 +11,7 @@ namespace SberHTMLParser
         public Table I;
         public Table C;
 
-        public String filePath;
-
-        Variables va;
-        DataTable instruments;
+        String filePath;
 
         DateTime Date;
         String ISIN;
@@ -29,14 +25,13 @@ namespace SberHTMLParser
         double Course2RUB;
 
         /******************************************************************/
-        public Prices(Variables va)
+        public Prices(String filePath)
         {
-            this.va = va;
+            this.filePath = filePath;
             I = new Table("Prices");
+            I.IsEmpty = true;
             C = new Table("Rates");
-            instruments = (from t in va.tables_list where t.Name == "instruments" select t.table).ToArray().FirstOrDefault();
-            va.tables_list.Add(this.I);
-            va.tables_list.Add(this.C);
+            C.IsEmpty = true;
         }
 
         /******************************************************************/
@@ -95,7 +90,7 @@ namespace SberHTMLParser
                     };
                         var rows = dataList.Select(array => array.Length).Concat(new[] { 0 }).Max();
                         for (var j = 0; j < rows; j++)
-                        {                            
+                        {
                             Date = Convert.ToDateTime(dataList[0][j]);
                             ISIN = dataList[1][j];
                             Nominal = Convert.ToDouble(dataList[2][j].Replace("NULL", "0"));
@@ -106,6 +101,7 @@ namespace SberHTMLParser
                             add_row_I();
                         }
                         ret = true;
+                        I.IsEmpty = false;
                     }
                     /*----------------------------------------------------------------------------*/
                     ws_p_curr = workBook.Worksheet("prices_curr");
@@ -134,10 +130,12 @@ namespace SberHTMLParser
                             add_row_C();
                         }
                         ret = true;
+                        C.IsEmpty = false;
                     }
                     /*----------------------------------------------------------------------------*/
                 }
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 Console.WriteLine($"Ошибка при парсинге файла с ценами {filePath}");
                 Console.WriteLine(e);
@@ -157,10 +155,14 @@ namespace SberHTMLParser
                         select new
                         {
                             Price = r.Field<double>("Price")
-                            , PriceCurrency = r.Field<String>("PriceCurrency")
-                            , Nominal = r.Field<double>("Nominal")
-                            , NominalCurrency = r.Field<String>("NominalCurrency")
-                            , Accrued = r.Field<double>("AccInt")
+                            ,
+                            PriceCurrency = r.Field<String>("PriceCurrency")
+                            ,
+                            Nominal = r.Field<double>("Nominal")
+                            ,
+                            NominalCurrency = r.Field<String>("NominalCurrency")
+                            ,
+                            Accrued = r.Field<double>("AccInt")
                         };
                 if (x.Any())
                 {

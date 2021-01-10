@@ -1,26 +1,29 @@
-﻿using HtmlAgilityPack;
+﻿using ClosedXML.Excel;
+using HtmlAgilityPack;
 using System;
-using System.Data;
-using System.Linq;
-using ClosedXML.Excel;
-using System.IO;
-using System.Text.RegularExpressions;
-using System.Globalization;
-using System.Text;
 using System.Configuration;
+using System.Data;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace SberHTMLParser
 {
     class Program
     {
+        // ссылка на класс с глобальными переменными
         public static Variables va = new Variables();
-        public static Prices prices = new Prices(va);
+        // ссылка на класс Prices
+        public static Prices prices;
+        // массив из табличек документа - html текст
+        static string[] htmlTables;
 
         /**************************************************************************/
-        // create array of tables from html
-        public static string[] ParseHtmlSplitTables()
+        // создаем массив из найденных в документе табличек
+        public static void ParseHtmlSplitTables()
         {
-            string[] result = new string[] { };
             if (!String.IsNullOrWhiteSpace(va.html))
             {
                 HtmlDocument doc = new HtmlDocument();
@@ -28,10 +31,9 @@ namespace SberHTMLParser
                 var tableNodes = doc.DocumentNode.SelectNodes("//table");
                 if (tableNodes != null)
                 {
-                    result = Array.ConvertAll<HtmlNode, string>(tableNodes.ToArray(), n => n.OuterHtml);
+                    htmlTables = Array.ConvertAll<HtmlNode, string>(tableNodes.ToArray(), n => n.OuterHtml);
                 }
             }
-            return result;
         }
 
         /**************************************************************************/
@@ -41,32 +43,36 @@ namespace SberHTMLParser
             string in_file = "";
             string price_file = "";
             string out_file = "";
-            string[] htmlTables;
 
             bool ShowAutoFilter = true;
 
             /*----------------------------------------------------------------------------*/
             if (args.Length == 0)
             {
-                Console.WriteLine("SberHTMLParser <path to Html file>");
+                Console.WriteLine("SberHTMLParser <path to Html file> [path to prices file]");
                 return 1;
-            } else
+            }
+            else
             {
+                // 
                 in_file = args[0];
-                if ( !File.Exists(in_file) )
+                if (!File.Exists(in_file))
                 {
                     Console.WriteLine($"File {in_file} does not exists");
                     return 1;
                 }
-                // если есть файл с ценами, то будет с ним спариваться !
-                // файл должен иметь определенную структуру
+
+                // если есть файл с ценами, то будет пробовать заполнить таьлички Prices и Rates !
+                // файл должен иметь определенную структуру.
                 if (args.Length == 2)
                 {
                     price_file = args[1];
                     if (File.Exists(price_file))
                     {
-                        prices.filePath = price_file;
+                        prices = new Prices(price_file);
                         prices.calculate();
+                        if (!prices.I.IsEmpty) { va.tables_list.Add(prices.I); }
+                        if (!prices.C.IsEmpty) { va.tables_list.Add(prices.C); }
                     }
                 }
             }
@@ -79,7 +85,7 @@ namespace SberHTMLParser
             // считываем файл в строку сначала без преобразования и попробуем найти фразу "Отчет брокера"
             // если не находим, то пробуем переключиться в windows-1251
             va.html = File.ReadAllText(in_file);
-            if ( !va.html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
+            if (!va.html.Contains("Отчет брокера", StringComparison.OrdinalIgnoreCase))
             {
                 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
                 va.html = File.ReadAllText(in_file, Encoding.GetEncoding("windows-1251"));
@@ -87,13 +93,13 @@ namespace SberHTMLParser
                 {
                     Console.WriteLine($"Файл {in_file} в неизвестной кодировке");
                     return 1;
-                }                   
+                }
             }
             // убираем из документа <TBODY> и </TBODY>. Нам при парсинге таблиц они не нужны. В разных вариантах брокерского отчета эти теги или есть или нет.
             va.html = va.html.Replace("<tbody>", "", StringComparison.OrdinalIgnoreCase).Replace("</tbody>", "", StringComparison.OrdinalIgnoreCase);
 
             // парсим документ и создаем массив из всех таблиц
-            htmlTables = ParseHtmlSplitTables();
+            ParseHtmlSplitTables();
 
             // узнаем период отчета и дату создания. очень приблизительно предполагаем, что это строка 
             // <br>за период с dd.MM.YYYY по dd.MM.YYYY, дата создания dd.MM.YYYY</br>
@@ -101,7 +107,7 @@ namespace SberHTMLParser
             if (Regex.IsMatch(va.html, pattern))
             {
                 Match match = Regex.Matches(va.html, pattern).First();
-                string s = va.html.Substring(match.Index-30, 62);
+                string s = va.html.Substring(match.Index - 30, 62);
 
                 var regex = new Regex(@"\b\d{2}\.\d{2}.\d{4}\b");
                 foreach (Match m in regex.Matches(s))
@@ -132,25 +138,26 @@ namespace SberHTMLParser
                     string columns_content = e[4];
 
                     var header = nodes[h_row].Elements("td").Select(td => td.InnerText.Trim()).ToArray();
-                    
+
                     if (header.Length == h_length)
-                    {                        
+                    {
                         int found = 0;
                         var c = columns.Split('#');
-                        for (int ii=1; ii<= c.Length; ii++)
+                        for (int ii = 1; ii <= c.Length; ii++)
                         {
-                            if (header[Convert.ToInt32(c[ii-1])].Contains(columns_content.Split('#')[ii-1]))
-                            {                                
+                            if (header[Convert.ToInt32(c[ii - 1])].Contains(columns_content.Split('#')[ii - 1]))
+                            {
                                 found++;
                             }
-                        }                        
-                        if (found == c.Length) { 
+                        }
+                        if (found == c.Length)
+                        {
                             T = new Table(table_name);
                         }
                     }
                 }
 
-                if ( T != null && !T.IsEmpty)
+                if (T != null && !T.IsEmpty)
                 {
                     T.addrows_from_nodes(nodes);
                     va.tables_list.Add(T);
@@ -158,6 +165,18 @@ namespace SberHTMLParser
 
             }
             /*----------------------------------------------------------------------------*/
+
+
+            // worksheet "Позиция"
+            Position p = new Position(va, prices);
+            va.tables_list.Add(p.T);
+            p.calculate();
+
+            // worksheet "PL"
+            PL pl = new PL(va, prices);
+            va.tables_list.Add(pl.T);
+            pl.calculate();
+
 
             /*----------------------------------------------------------------------------*/
             // export to excel
@@ -170,56 +189,51 @@ namespace SberHTMLParser
             int i = 1;
             foreach (DateTime d in va.report_dates)
             {
-                if (i == 1) { ws.Cell(i, 1).Value = "Начало периода";  }
-                if (i == 2) { ws.Cell(i, 1).Value = "Конец периода";  }
-                if (i == 3) { ws.Cell(i, 1).Value = "Дата создания отчета";  }
+                if (i == 1) { ws.Cell(i, 1).Value = "Начало периода"; }
+                if (i == 2) { ws.Cell(i, 1).Value = "Конец периода"; }
+                if (i == 3) { ws.Cell(i, 1).Value = "Дата создания отчета"; }
                 ws.Cell(i, 2).Value = d.ToString();
                 i++;
             }
             ws.Columns().AdjustToContents();
 
-            // worksheet "Позиция"
-            Position p = new Position(va, prices);
-            va.tables_list.Add(p.T);
-            p.calculate();
-
-            // worksheet "PL"
-            PL pl = new PL(va, prices);
-            va.tables_list.Add(pl.T);
-            pl.calculate();
 
             // worksheets from list of tables
             foreach (Table t in va.tables_list.OrderBy(o => o.Order))
             {
 
-                ws = wb.Worksheets.Add(t.table, t.WorksheetName);
-
-                /*----------------------------------------------------------------------------*/
-                // добавление формул
-                int c_col = 1;
-                foreach (DataColumn c in t.table.Columns)
+                if (!t.IsEmpty)
                 {
-                    if (c.ExtendedProperties.Count != 0)
+                    ws = wb.Worksheets.Add(t.table, t.WorksheetName);
+
+                    /*----------------------------------------------------------------------------*/
+                    // добавление формул
+                    int c_col = 1;
+                    foreach (DataColumn c in t.table.Columns)
                     {
-                        var rngData = ws.Range(2, c_col, t.table.Rows.Count + 1, c_col);
-                        rngData.LastColumn().FormulaR1C1 = c.ExtendedProperties["Formula"].ToString();
+                        if (c.ExtendedProperties.Count != 0)
+                        {
+                            var rngData = ws.Range(2, c_col, t.table.Rows.Count + 1, c_col);
+                            rngData.LastColumn().FormulaR1C1 = c.ExtendedProperties["Formula"].ToString();
+                        }
+                        c_col++;
                     }
-                    c_col++;
-                }
 
-                /*----------------------------------------------------------------------------*/
-                // format columns
-                for (int a=0; a<= t.table.Columns.Count - 1; a++) 
-                {
-                    if (t.table.Columns[a].DataType == System.Type.GetType("System.Double")) {
-                        ws.Columns(a+1,a+1).Style.NumberFormat.Format = "#,##0.00";
+                    /*----------------------------------------------------------------------------*/
+                    // format columns
+                    for (int a = 0; a <= t.table.Columns.Count - 1; a++)
+                    {
+                        if (t.table.Columns[a].DataType == System.Type.GetType("System.Double"))
+                        {
+                            ws.Columns(a + 1, a + 1).Style.NumberFormat.Format = "#,##0.00";
+                        }
                     }
-                }
 
-                ws.Row(1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
-                ws.Row(1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
-                ws.Tables.FirstOrDefault().ShowAutoFilter = ShowAutoFilter;
-                ws.Columns().AdjustToContents();
+                    ws.Row(1).Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                    ws.Row(1).Style.Alignment.SetVertical(XLAlignmentVerticalValues.Top);
+                    ws.Tables.FirstOrDefault().ShowAutoFilter = ShowAutoFilter;
+                    ws.Columns().AdjustToContents();
+                }
             }
 
             // save file

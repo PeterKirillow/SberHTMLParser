@@ -4,6 +4,10 @@ using System.Data;
 using System.Linq;
 using System.Text.RegularExpressions;
 
+/*
+ * 
+ */
+
 namespace SberHTMLParser
 {
     class PL
@@ -111,7 +115,7 @@ namespace SberHTMLParser
         }
 
         /******************************************************************/
-        private void position_from_portfolio (String instr, String curr)
+        private void position_from_portfolio(String instr, String curr)
         {
             // если есть позиция на начало периода в отчете в таблице "Портфель Ценных Бумаг",
             // берем данные из нее
@@ -128,7 +132,8 @@ namespace SberHTMLParser
                             PeriodBeginNominal = r.Field<double>("PeriodBeginNominal")
                         }
                         by new { Instrument = r.Field<string>("Instrument"), Currency = r.Field<string>("Currency") }
-                        into g select new
+                        into g
+                        select new
                         {
                             g.Key.Instrument,
                             g.Key.Currency,
@@ -145,13 +150,14 @@ namespace SberHTMLParser
                     AmountEnd = x.First().AmountEnd;
                     QtyEnd = x.First().QtyEnd;
                     NominalBegin = x.First().PeriodBeginNominal;
-                    if (AmountBegin != 0) {
+                    if (AmountBegin != 0)
+                    {
                         AvgPriceBegin = Math.Abs(AmountBegin / QtyBegin / (IsBond ? NominalBegin : 1) * (IsBond ? 100 : 1));
                     }
-                    
+
                 }
             }
-        }        
+        }
 
         /******************************************************************/
         private void add_inoperations(String instr, String mode)
@@ -277,13 +283,14 @@ namespace SberHTMLParser
 
                 if (x.Any())
                 {
-                    if ( mode.Equals("begin") )
+                    if (mode.Equals("begin"))
                     {
                         AmountBegin = AmountBegin + x.First().Buy - x.First().Sell - x.First().CommBrok - x.First().CommExch + x.First().AccruedSell - x.First().AccruedBuy;
                         NominalBegin = x.First().Nominal;
                         QtyBegin = QtyBegin + x.First().QtySumm;
                         AvgPriceBegin = Math.Abs(AmountBegin / QtyBegin / NominalBegin * (IsBond ? 100 : 1));
-                    } else
+                    }
+                    else
                     {
                         BuyQty = BuyQty + x.First().BuyQty;
                         BuyAmount = BuyAmount + x.First().Buy;
@@ -301,7 +308,7 @@ namespace SberHTMLParser
         {
             Match match;
             // зачисление купонов на брокерский счет
-            if ( operations != null )
+            if (operations != null)
             {
                 string pattern_coupon = $"Зачисление д/с.*купон.*{instr}";
                 var x = from r in operations.AsEnumerable()
@@ -358,12 +365,12 @@ namespace SberHTMLParser
         {
             Match match;
             // погашения
-            if (operations != null )
+            if (operations != null)
             {
                 string pattern_repaiment = $"Зачисление д/с.*погашение.*{instr}";
                 var x = from r in operations.AsEnumerable()
-                         where r.Field<String>("Currency") == curr && r.Field<String>("Description").Contains(instr)
-                         select new { Description = r.Field<String>("Description"), Amount = r.Field<double>("AmountIn") };
+                        where r.Field<String>("Currency") == curr && r.Field<String>("Description").Contains(instr)
+                        select new { Description = r.Field<String>("Description"), Amount = r.Field<double>("AmountIn") };
 
                 foreach (var xx in x)
                 {
@@ -382,8 +389,8 @@ namespace SberHTMLParser
             {
                 string pattern_repaiment = $"Списание налога за налоговый период";
                 var x = from r in operations.AsEnumerable()
-                         where r.Field<String>("Currency") == curr
-                         select new { Description = r.Field<String>("Description"), Amount = r.Field<double>("AmountOut") };
+                        where r.Field<String>("Currency") == curr
+                        select new { Description = r.Field<String>("Description"), Amount = r.Field<double>("AmountOut") };
 
                 foreach (var xx in x)
                 {
@@ -414,7 +421,7 @@ namespace SberHTMLParser
                 IsBond = (i.Field<string>("Type").ToLower().Contains("облигация") ? true : false);
 
                 bool contains = position.AsEnumerable().Any(row => Instrument == row.Field<String>("Instrument"));
-                if ( contains )
+                if (contains)
                 {
                     MinDate = DateTime.Parse("01.01.1970");
                     MaxDate = DateTime.Parse("01.01.1970");
@@ -457,7 +464,7 @@ namespace SberHTMLParser
                         list = money_out.AsEnumerable().Where(i => i["Description"].ToString().Contains(Instrument)).Select(x => x["Currency"].ToString()).Distinct().ToList();
                         curr_List = curr_List.Concat(list ?? new List<string>()).Distinct().ToList();
                     }
-                    
+
                     // итак, если у нас всего одна валюта - это хорошо
                     // если больше, то смотрим, не заполниоли ли мы ранее валлюту из портфеля, если да, то оставляем ее, если нет, то делаем основной валютой первую из доступных
                     // вариант, когда валют больше 2-х, не хочу даже рассматривать.
@@ -465,10 +472,11 @@ namespace SberHTMLParser
                     if (curr_List.Count == 1)
                     {
                         this.PortfolioCurrency = curr_List[0];
-                    } else
+                    }
+                    else
                     {
                         PortfolioCurrency = (PortfolioCurrency == "" ? curr_List[0] : PortfolioCurrency);
-                        Console.WriteLine($"Инструмент {Instrument} представлен в нескольких валютах: {string.Join(',',curr_List)}");
+                        Console.WriteLine($"Инструмент {Instrument} представлен в нескольких валютах: {string.Join(',', curr_List)}");
                     }
 
                     foreach (var c in curr_List)
@@ -492,7 +500,7 @@ namespace SberHTMLParser
 
                         add_row();
                     }
-                    
+
                 }
 
             }
@@ -503,7 +511,7 @@ namespace SberHTMLParser
             // например Дивиденды и Налоги. Если они есть.
             if (operations != null)
             {
-                var c_curr = operations.AsEnumerable().Select(row => new {Currency = row.Field<string>("Currency")}).Distinct();
+                var c_curr = operations.AsEnumerable().Select(row => new { Currency = row.Field<string>("Currency") }).Distinct();
 
                 foreach (var cc in c_curr)
                 {
@@ -515,7 +523,7 @@ namespace SberHTMLParser
                     add_tax(cc.Currency);
                     add_row();
                 }
-            }                
+            }
             /*----------------------------------------------------------------------------*/
         }
     }
